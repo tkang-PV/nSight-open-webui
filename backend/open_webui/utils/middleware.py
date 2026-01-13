@@ -448,10 +448,8 @@ async def chat_completion_tools_handler(
                             }
                         )
 
-                print(
-                    f"Tool {tool_function_name} result: {tool_result}",
-                    tool_result_files,
-                    tool_result_embeds,
+                log.debug(
+                    f"Tool {tool_function_name} result: {tool_result}, files: {tool_result_files}, embeds: {tool_result_embeds}"
                 )
 
                 if tool_result:
@@ -1672,9 +1670,15 @@ async def process_chat_response(
 
     # Non-streaming response
     if not isinstance(response, StreamingResponse):
+        log.info(f"Middleware: Non-streaming response detected, type: {type(response)}")
+        log.info(f"Middleware: event_emitter is {'available' if event_emitter else 'None'}")
+        log.info(f"Middleware: metadata keys: {list(metadata.keys())}")
+        
         if event_emitter:
+            log.info("Middleware: Event emitter is available - processing response")
             try:
                 if isinstance(response, dict) or isinstance(response, JSONResponse):
+                    log.info(f"Middleware: Response is dict or JSONResponse")
                     if isinstance(response, list) and len(response) == 1:
                         # If the response is a single-item list, unwrap it #17213
                         response = response[0]
@@ -1726,10 +1730,18 @@ async def process_chat_response(
                         )
 
                     choices = response_data.get("choices", [])
+                    log.info(f"Middleware: Non-streaming response - choices count: {len(choices)}")
+                    if choices:
+                        log.info(f"Middleware: First choice message keys: {list(choices[0].get('message', {}).keys())}")
+                    
                     if choices and choices[0].get("message", {}).get("content"):
                         content = response_data["choices"][0]["message"]["content"]
 
                         if content:
+                            log.info(f"Middleware: Processing response with content length: {len(content)}")
+                            log.info(f"Middleware: Response has strands_internals: {'strands_internals' in response_data}")
+                            log.info(f"Middleware: Message has strands_internals: {'strands_internals' in choices[0].get('message', {})}")
+                            
                             await event_emitter(
                                 {
                                     "type": "chat:completion",
@@ -1738,26 +1750,68 @@ async def process_chat_response(
                             )
 
                             title = Chats.get_chat_title_by_id(metadata["chat_id"])
+                            
+                            # Prepare completion data
+                            completion_data = {
+                                "done": True,
+                                "content": content,
+                                "title": title,
+                            }
+                            
+                            # Include strands_internals if present (ensure JSON serializable)
+                            if "strands_internals" in response_data:
+                                try:
+                                    # Convert to JSON and back to ensure it's serializable
+                                    internals_json = json.dumps(response_data["strands_internals"], default=str)
+                                    completion_data["strands_internals"] = json.loads(internals_json)
+                                    log.info(f"Middleware: Added strands_internals from response_data to completion_data")
+                                except Exception as e:
+                                    log.error(f"Middleware: Failed to serialize strands_internals: {e}")
+                            elif choices and choices[0].get("message", {}).get("strands_internals"):
+                                try:
+                                    # Convert to JSON and back to ensure it's serializable
+                                    internals_json = json.dumps(choices[0]["message"]["strands_internals"], default=str)
+                                    completion_data["strands_internals"] = json.loads(internals_json)
+                                    log.info(f"Middleware: Added strands_internals from message to completion_data")
+                                except Exception as e:
+                                    log.error(f"Middleware: Failed to serialize strands_internals from message: {e}")
 
                             await event_emitter(
                                 {
                                     "type": "chat:completion",
-                                    "data": {
-                                        "done": True,
-                                        "content": content,
-                                        "title": title,
-                                    },
+                                    "data": completion_data,
                                 }
                             )
 
                             # Save message in the database
+                            message_data = {
+                                "role": "assistant",
+                                "content": content,
+                            }
+                            
+                            # Include strands_internals if present in the response (ensure JSON serializable)
+                            if "strands_internals" in response_data:
+                                try:
+                                    # Convert to JSON and back to ensure it's serializable
+                                    internals_json = json.dumps(response_data["strands_internals"], default=str)
+                                    message_data["strands_internals"] = json.loads(internals_json)
+                                    log.info(f"Middleware: Saving strands_internals to database from response_data")
+                                except Exception as e:
+                                    log.error(f"Middleware: Failed to serialize strands_internals for DB: {e}")
+                            # Also check in the message itself
+                            elif choices and choices[0].get("message", {}).get("strands_internals"):
+                                try:
+                                    # Convert to JSON and back to ensure it's serializable
+                                    internals_json = json.dumps(choices[0]["message"]["strands_internals"], default=str)
+                                    message_data["strands_internals"] = json.loads(internals_json)
+                                    log.info(f"Middleware: Saving strands_internals from message to database")
+                                except Exception as e:
+                                    log.error(f"Middleware: Failed to serialize strands_internals from message for DB: {e}")
+                            
                             Chats.upsert_message_to_chat_by_id_and_message_id(
                                 metadata["chat_id"],
                                 metadata["message_id"],
-                                {
-                                    "role": "assistant",
-                                    "content": content,
-                                },
+                                message_data,
                             )
 
                             # Send a webhook notification if the user is not active
@@ -1801,11 +1855,49 @@ async def process_chat_response(
                         )
 
             except Exception as e:
-                log.debug(f"Error occurred while processing request: {e}")
+                log.error(f"Error occurred while processing request: {e}")
+                import traceback
+                traceback.print_exc()
                 pass
 
             return response
         else:
+            log.info("Middleware: No event_emitter - handling response without websocket")
+            
+            # Still need to save strands_internals to database even without event_emitter
+            if isinstance(response, dict) and metadata.get("chat_id") and metadata.get("message_id"):
+                if not metadata["chat_id"].startswith("local:"):
+                    choices = response.get("choices", [])
+                    if choices and choices[0].get("message", {}).get("content"):
+                        message_data = {
+                            "role": "assistant",
+                            "content": response["choices"][0]["message"]["content"],
+                        }
+                        
+                        # Include strands_internals if present (ensure JSON serializable)
+                        if "strands_internals" in response:
+                            try:
+                                internals_json = json.dumps(response["strands_internals"], default=str)
+                                message_data["strands_internals"] = json.loads(internals_json)
+                                log.info("Middleware: Saving strands_internals (no event_emitter path)")
+                            except Exception as e:
+                                log.error(f"Middleware: Failed to serialize strands_internals (no emitter): {e}")
+                        elif "strands_internals" in choices[0].get("message", {}):
+                            try:
+                                internals_json = json.dumps(choices[0]["message"]["strands_internals"], default=str)
+                                message_data["strands_internals"] = json.loads(internals_json)
+                                log.info("Middleware: Saving strands_internals from message (no event_emitter path)")
+                            except Exception as e:
+                                log.error(f"Middleware: Failed to serialize strands_internals from msg (no emitter): {e}")
+                        
+                        if "strands_internals" in message_data:
+                            Chats.upsert_message_to_chat_by_id_and_message_id(
+                                metadata["chat_id"],
+                                metadata["message_id"],
+                                message_data,
+                            )
+                            log.info(f"Middleware: Saved message with strands_internals to chat {metadata['chat_id'][:8]}")
+            
             if events and isinstance(events, list) and isinstance(response, dict):
                 extra_response = {}
                 for event in events:

@@ -37,6 +37,7 @@
 	import EllipsisHorizontal from '$lib/components/icons/EllipsisHorizontal.svelte';
 	import EyeSlash from '$lib/components/icons/EyeSlash.svelte';
 	import Eye from '$lib/components/icons/Eye.svelte';
+	import StrandsAISettings from './Models/StrandsAISettings.svelte';
 	import { WEBUI_BASE_URL } from '$lib/constants';
 
 	let shiftKey = false;
@@ -454,6 +455,13 @@
 				</div>
 			{/if}
 		</div>
+
+		<!-- Strands AI Settings Section -->
+		{#if $user?.role === 'admin'}
+			<div class="mb-6">
+				<StrandsAISettings />
+			</div>
+		{/if}
 
 		{#if $user?.role === 'admin'}
 			<div class=" flex justify-end w-full mb-3">

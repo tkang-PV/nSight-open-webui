@@ -30,6 +30,7 @@
 	import PencilSquare from '../icons/PencilSquare.svelte';
 	import Banner from '../common/Banner.svelte';
 	import Sidebar from '../icons/Sidebar.svelte';
+	import RegionCustomerDropdowns from './RegionCustomerDropdowns.svelte';
 
 	import ChatBubbleDotted from '../icons/ChatBubbleDotted.svelte';
 	import ChatBubbleDottedChecked from '../icons/ChatBubbleDottedChecked.svelte';
@@ -52,6 +53,7 @@
 	export let onSaveTempChat: () => {};
 	export let archiveChatHandler: (id: string) => void;
 	export let moveChatHandler: (id: string, folderId: string) => void;
+	export let messageInput = null;
 
 	let closedBannerIds = [];
 
@@ -102,12 +104,19 @@
 			{$showSidebar ? 'ml-1' : ''}
 			"
 				>
-					{#if showModelSelector}
-						<ModelSelector bind:selectedModels showSetDefault={!shareEnabled} />
-					{/if}
+					<div class="flex items-center gap-2">
+						{#if showModelSelector}
+							<div class="flex-1">
+								<ModelSelector bind:selectedModels showSetDefault={!shareEnabled} />
+							</div>
+						{/if}
+					</div>
 				</div>
 
-				<div class="self-start flex flex-none items-center text-gray-600 dark:text-gray-400">
+				<div class="self-start flex flex-none items-center text-gray-600 dark:text-gray-400 gap-1.5">
+					<div class="flex-shrink-0">
+						<RegionCustomerDropdowns {messageInput} />
+					</div>
 					<!-- <div class="md:hidden flex self-center w-[1px] h-5 mx-2 bg-gray-300 dark:bg-stone-700" /> -->
 
 					{#if $user?.role === 'user' ? ($user?.permissions?.chat?.temporary ?? true) && !($user?.permissions?.chat?.temporary_enforced ?? false) : true}

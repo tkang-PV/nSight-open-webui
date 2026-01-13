@@ -63,7 +63,7 @@ fpdf2==2.8.2
 pymdown-extensions==10.14.2
 docx2txt==0.8
 python-pptx==1.0.2
-unstructured==0.16.17
+unstructured==0.18.15
 nltk==3.9.1
 Markdown==3.9
 pypandoc==1.15
@@ -79,7 +79,7 @@ azure-ai-documentintelligence==1.0.2
 
 pillow==11.3.0
 opencv-python-headless==4.11.0.86
-rapidocr-onnxruntime==1.4.4
+rapidocr-onnxruntime==1.2.3
 rank-bm25==0.2.2
 
 onnxruntime==1.20.1
@@ -114,7 +114,7 @@ boto3==1.40.5
 
 pymilvus==2.6.2
 qdrant-client==1.14.3
-playwright==1.49.1 # Caution: version must match docker-compose.playwright.yaml
+playwright==1.51 # Caution: version must match docker-compose.playwright.yaml
 elasticsearch==9.1.0
 pinecone==6.0.2
 oracledb==3.2.0
@@ -147,3 +147,9 @@ opentelemetry-instrumentation-requests==0.58b0
 opentelemetry-instrumentation-logging==0.58b0
 opentelemetry-instrumentation-httpx==0.58b0
 opentelemetry-instrumentation-aiohttp-client==0.58b0
+
+
+## Aws Strands AI
+strands-agents
+strands-agents-tools
+clickhouse_connect

@@ -92,6 +92,7 @@
 	import { getFunctions } from '$lib/apis/functions';
 	import Image from '../common/Image.svelte';
 	import { updateFolderById } from '$lib/apis/folders';
+	import RegionCustomerDropdowns from './RegionCustomerDropdowns.svelte';
 
 	export let chatIdProp = '';
 
@@ -1377,6 +1378,18 @@
 					}
 				}
 			}
+
+			// Handle Strands AI internals streaming updates
+			if (choices[0]?.delta?.strands_internals) {
+				console.log('Received strands_internals delta:', choices[0].delta.strands_internals);
+				message.strands_internals = choices[0].delta.strands_internals;
+			}
+		}
+
+		// Handle top-level strands_internals (for compatibility)
+		if (data.strands_internals) {
+			console.log('Received top-level strands_internals:', data.strands_internals);
+			message.strands_internals = data.strands_internals;
 		}
 
 		if (content) {
@@ -2364,6 +2377,7 @@
 						{initNewChat}
 						archiveChatHandler={() => {}}
 						{moveChatHandler}
+						{messageInput}
 						onSaveTempChat={async () => {
 							try {
 								if (!history?.currentId || !Object.keys(history.messages).length) {

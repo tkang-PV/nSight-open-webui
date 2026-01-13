@@ -1523,7 +1523,7 @@ CORS_ALLOW_CUSTOM_SCHEME = os.environ.get("CORS_ALLOW_CUSTOM_SCHEME", "").split(
 
 if CORS_ALLOW_ORIGIN == ["*"]:
     log.warning(
-        "\n\nWARNING: CORS_ALLOW_ORIGIN IS SET TO '*' - NOT RECOMMENDED FOR PRODUCTION DEPLOYMENTS.\n"
+        "CORS_ALLOW_ORIGIN IS SET TO '*' - NOT RECOMMENDED FOR PRODUCTION DEPLOYMENTS."
     )
 else:
     # You have to pick between a single wildcard or a list of origins.
@@ -3578,4 +3578,44 @@ LDAP_ATTRIBUTE_FOR_GROUPS = PersistentConfig(
     "LDAP_ATTRIBUTE_FOR_GROUPS",
     "ldap.server.attribute_for_groups",
     os.environ.get("LDAP_ATTRIBUTE_FOR_GROUPS", "memberOf"),
+)
+
+####################################
+# LOG TO FILE
+####################################
+
+ENABLE_LOG_TO_FILE = PersistentConfig(
+    "ENABLE_LOG_TO_FILE",
+    "logging.file.enable",
+    os.environ.get("ENABLE_LOG_TO_FILE", "False").lower() == "true",
+)
+
+LOG_FILE_PATH = PersistentConfig(
+    "LOG_FILE_PATH",
+    "logging.file.path",
+    os.environ.get("LOG_FILE_PATH", f"{DATA_DIR}/open-webui.log"),
+)
+
+LOG_FILE_MAX_SIZE = PersistentConfig(
+    "LOG_FILE_MAX_SIZE",
+    "logging.file.max_size",
+    os.environ.get("LOG_FILE_MAX_SIZE", "10MB"),
+)
+
+LOG_FILE_BACKUP_COUNT = PersistentConfig(
+    "LOG_FILE_BACKUP_COUNT",
+    "logging.file.backup_count",
+    int(os.environ.get("LOG_FILE_BACKUP_COUNT", "5")),
+)
+
+LOG_FILE_FORMAT = PersistentConfig(
+    "LOG_FILE_FORMAT",
+    "logging.file.format",
+    os.environ.get("LOG_FILE_FORMAT", "%(asctime)s - %(name)s - %(levelname)s - %(message)s"),
+)
+
+LOG_FILE_DATE_FORMAT = PersistentConfig(
+    "LOG_FILE_DATE_FORMAT",
+    "logging.file.date_format",
+    os.environ.get("LOG_FILE_DATE_FORMAT", "%Y-%m-%d %H:%M:%S"),
 )

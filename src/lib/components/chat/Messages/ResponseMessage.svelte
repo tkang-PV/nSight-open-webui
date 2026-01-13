@@ -54,6 +54,7 @@
 	import RegenerateMenu from './ResponseMessage/RegenerateMenu.svelte';
 	import StatusHistory from './ResponseMessage/StatusHistory.svelte';
 	import FullHeightIframe from '$lib/components/common/FullHeightIframe.svelte';
+	import StrandsInternals from './StrandsInternals.svelte';
 
 	interface MessageType {
 		id: string;
@@ -116,6 +117,21 @@
 		if (JSON.stringify(message) !== JSON.stringify(history.messages[messageId])) {
 			message = JSON.parse(JSON.stringify(history.messages[messageId]));
 		}
+	}
+	
+	// Debug: Log message to see if it has strands_internals
+	$: if (message) {
+		console.log('ResponseMessage - message.id:', message.id);
+		console.log('ResponseMessage - has strands_internals:', !!message.strands_internals);
+		if (message.strands_internals) {
+			console.log('ResponseMessage - strands_internals:', message.strands_internals);
+		}
+	}
+
+	// Track streaming state for Strands internals
+	let strandsStreaming = false;
+	$: if (message?.strands_internals) {
+		strandsStreaming = message.strands_internals.streaming ?? false;
 	}
 
 	export let siblings;
@@ -754,6 +770,11 @@
 							</div>
 						{:else}
 							<div class="w-full flex flex-col relative" id="response-content-container">
+								<!-- Strands AI Agent Thinking Process - Positioned at top -->
+								{#if message.strands_internals && (model?.owned_by === 'strands-ai' || message.model?.includes('strands'))}
+									<StrandsInternals internals={message.strands_internals} streaming={strandsStreaming} />
+								{/if}
+
 								{#if message.content === '' && !message.error && ((model?.info?.meta?.capabilities?.status_updates ?? true) ? (message?.statusHistory ?? [...(message?.status ? [message?.status] : [])]).length === 0 || (message?.statusHistory?.at(-1)?.hidden ?? false) : true)}
 									<Skeleton />
 								{:else if message.content && message.error !== true}

@@ -731,6 +731,30 @@ AUDIT_EXCLUDED_PATHS = os.getenv("AUDIT_EXCLUDED_PATHS", "/chats,/chat,/folders"
 AUDIT_EXCLUDED_PATHS = [path.strip() for path in AUDIT_EXCLUDED_PATHS]
 AUDIT_EXCLUDED_PATHS = [path.lstrip("/") for path in AUDIT_EXCLUDED_PATHS]
 
+####################################
+# GENERAL LOG TO FILE
+####################################
+# Enable logging to file
+ENABLE_LOG_TO_FILE = os.getenv("ENABLE_LOG_TO_FILE", "False").lower() == "true"
+
+# Where to store general log file
+LOG_FILE_PATH = os.getenv("LOG_FILE_PATH", f"{DATA_DIR}/open-webui.log")
+
+# Maximum size of a log file before rotating into a new log file
+LOG_FILE_MAX_SIZE = os.getenv("LOG_FILE_MAX_SIZE", "10MB")
+
+# Number of backup log files to keep
+LOG_FILE_BACKUP_COUNT = int(os.getenv("LOG_FILE_BACKUP_COUNT", "5"))
+
+# Log format for file logging
+LOG_FILE_FORMAT = os.getenv(
+    "LOG_FILE_FORMAT", 
+    "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+
+# Date format for log timestamps
+LOG_FILE_DATE_FORMAT = os.getenv("LOG_FILE_DATE_FORMAT", "%Y-%m-%d %H:%M:%S")
+
 
 ####################################
 # OPENTELEMETRY

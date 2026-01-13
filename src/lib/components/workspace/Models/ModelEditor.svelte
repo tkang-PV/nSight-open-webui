@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { toast } from 'svelte-sonner';
+	import { marked } from 'marked';
+	import DOMPurify from 'dompurify';
 
 	import { onMount, getContext, tick } from 'svelte';
 	import { models, tools, functions, knowledge as knowledgeCollections, user } from '$lib/stores';
@@ -17,6 +19,7 @@
 	import ActionsSelector from '$lib/components/workspace/Models/ActionsSelector.svelte';
 	import Capabilities from '$lib/components/workspace/Models/Capabilities.svelte';
 	import Textarea from '$lib/components/common/Textarea.svelte';
+	import TextareaWithLineNumbers from '$lib/components/common/TextareaWithLineNumbers.svelte';
 	import AccessControl from '../common/AccessControl.svelte';
 	import Spinner from '$lib/components/common/Spinner.svelte';
 	import XMark from '$lib/components/icons/XMark.svelte';
@@ -41,6 +44,13 @@
 
 	let showAdvanced = false;
 	let showPreview = false;
+	let systemPromptTab: 'prompt' | 'preview' = 'prompt';
+	
+	let previewContentElement: HTMLDivElement;
+	let previewLineNumbersElement: HTMLDivElement;
+	let promptTextareaElement: any; // Reference to the TextareaWithLineNumbers component
+	
+	let sharedScrollPosition = 0; // Shared scroll position between tabs
 
 	let loaded = false;
 
@@ -63,6 +73,10 @@
 	}
 
 	let system = '';
+	// Reactive size metrics for system prompt
+	$: systemCharCount = system.length;
+	// UTF-8 byte length estimation
+	$: systemByteCount = new TextEncoder().encode(system).length;
 	let info = {
 		id: '',
 		base_model_id: null,
@@ -313,6 +327,52 @@
 
 		loaded = true;
 	});
+
+	const syncPreviewScroll = () => {
+		if (previewContentElement && previewLineNumbersElement) {
+			previewLineNumbersElement.scrollTop = previewContentElement.scrollTop;
+			sharedScrollPosition = previewContentElement.scrollTop;
+		}
+	};
+
+	const handlePromptScrollChange = (scrollTop: number) => {
+		sharedScrollPosition = scrollTop;
+	};
+
+	// Handle tab switching with proper scroll position sync
+	const handleTabSwitch = async (newTab: 'prompt' | 'preview') => {
+		// Save current scroll position before switching
+		if (systemPromptTab === 'preview' && previewContentElement) {
+			sharedScrollPosition = previewContentElement.scrollTop;
+		} else if (systemPromptTab === 'prompt' && promptTextareaElement) {
+			sharedScrollPosition = promptTextareaElement.getScrollTop();
+		}
+		
+		// Switch the tab
+		systemPromptTab = newTab;
+		
+		// Wait for DOM to update
+		await tick();
+		
+		// Apply scroll position with multiple attempts to ensure it works
+		const applyScrollPosition = () => {
+			if (newTab === 'prompt' && promptTextareaElement) {
+				promptTextareaElement.setScrollTop(sharedScrollPosition);
+			} else if (newTab === 'preview' && previewContentElement) {
+				previewContentElement.scrollTop = sharedScrollPosition;
+				if (previewLineNumbersElement) {
+					previewLineNumbersElement.scrollTop = sharedScrollPosition;
+				}
+			}
+		};
+		
+		// Apply immediately
+		applyScrollPosition();
+		
+		// Also apply after a short delay as a fallback
+		setTimeout(applyScrollPosition, 10);
+		setTimeout(applyScrollPosition, 50);
+	};
 </script>
 
 {#if loaded}
@@ -605,16 +665,82 @@
 
 						<div class="mt-2">
 							<div class="my-1">
-								<div class=" text-xs font-semibold mb-2">{$i18n.t('System Prompt')}</div>
-								<div>
-									<Textarea
-										className=" text-sm w-full bg-transparent outline-hidden resize-none overflow-y-hidden "
-										placeholder={$i18n.t(
-											'Write your model system prompt content here\ne.g.) You are Mario from Super Mario Bros, acting as an assistant.'
-										)}
-										rows={4}
-										bind:value={system}
-									/>
+								<!-- Tab Navigation -->
+								<div class="flex border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden mb-2 w-fit">
+									<button
+										type="button"
+										class="px-3 py-1 text-xs font-medium transition-colors {systemPromptTab === 'prompt' 
+											? 'bg-blue-600 text-white dark:bg-blue-500' 
+											: 'bg-gray-50 text-gray-700 dark:bg-gray-800 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'}"
+										on:click={() => handleTabSwitch('prompt')}
+									>
+										{$i18n.t('System Prompt')}
+									</button>
+									<button
+										type="button"
+										class="px-3 py-1 text-xs font-medium transition-colors {systemPromptTab === 'preview' 
+											? 'bg-blue-600 text-white dark:bg-blue-500' 
+											: 'bg-gray-50 text-gray-700 dark:bg-gray-800 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'}"
+										on:click={() => handleTabSwitch('preview')}
+									>
+										{$i18n.t('MD Preview')}
+									</button>
+								</div>
+
+								<!-- Tab Content -->
+								<div class="relative {systemPromptTab === 'prompt' ? 'bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800' : 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'} rounded-md p-3 border">
+									{#if systemPromptTab === 'prompt'}
+										<!-- Size badge -->
+										<div class="absolute top-1 right-2 flex gap-1 items-center text-[10px] font-medium bg-white/70 dark:bg-gray-900/70 backdrop-blur px-2 py-0.5 rounded-md border border-gray-200 dark:border-gray-700 shadow-sm select-none">
+											<span>{$i18n.t('Bytes')}: {systemByteCount}</span>
+										</div>
+									{/if}
+									{#if systemPromptTab === 'prompt'}
+										<TextareaWithLineNumbers
+											bind:this={promptTextareaElement}
+											className=" text-xs text-gray-700 dark:text-gray-300 w-full bg-transparent outline-hidden resize-none overflow-y-auto whitespace-pre-wrap"
+											placeholder={$i18n.t(
+												'Write your model system prompt content here\ne.g.) You are Mario from Super Mario Bros, acting as an assistant.'
+											)}
+											rows={4}
+											minSize={window.innerHeight * 0.5}
+											maxSize={window.innerHeight * 0.5}
+											bind:value={system}
+											initialScrollTop={sharedScrollPosition}
+											onScrollChange={handlePromptScrollChange}
+										/>
+									{:else if systemPromptTab === 'preview'}
+										<div class="flex gap-0 w-full" style="min-height: {window.innerHeight * 0.5}px; max-height: {window.innerHeight * 0.5}px;">
+											<!-- Line numbers gutter for preview -->
+											<div
+												bind:this={previewLineNumbersElement}
+												class="flex flex-col overflow-hidden select-none text-right pr-2 pl-1 py-2 text-xs text-gray-400 dark:text-gray-600 bg-gray-100 dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700"
+												style="min-width: 3rem; line-height: 1.5;"
+											>
+												{#each Array.from({ length: Math.max(system ? system.split('\n').length : 1, 4) }, (_, i) => i + 1) as lineNum}
+													<div class="leading-normal">{lineNum}</div>
+												{/each}
+											</div>
+											
+											<!-- Preview content -->
+											<div 
+												bind:this={previewContentElement}
+												class="text-xs w-full bg-transparent outline-hidden resize-none overflow-y-auto scrollbar-thin scrollbar-thumb-gray-400 dark:scrollbar-thumb-gray-600 scrollbar-track-gray-100 dark:scrollbar-track-gray-800 px-3 py-2"
+												style="min-height: {window.innerHeight * 0.5}px; max-height: {window.innerHeight * 0.5}px; height: {window.innerHeight * 0.5}px; width: 100%; box-sizing: border-box;"
+												on:scroll={syncPreviewScroll}
+											>
+												{#if system.trim() === ''}
+													<div class="text-gray-400 dark:text-gray-500 italic">
+														{$i18n.t('No system prompt content to preview. Switch to System Prompt tab to add content.')}
+													</div>
+												{:else}
+													<div class="w-full prose prose-sm dark:prose-invert max-w-none text-gray-700 dark:text-gray-300">
+														{@html DOMPurify.sanitize(marked.parse(system))}
+													</div>
+												{/if}
+											</div>
+										</div>
+									{/if}
 								</div>
 							</div>
 
