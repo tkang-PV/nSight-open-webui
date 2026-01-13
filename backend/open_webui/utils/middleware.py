@@ -459,6 +459,7 @@ async def chat_completion_tools_handler(
 
                 log.debug(
                     f"Tool {tool_function_name} result: {tool_result}, files: {tool_result_files}, embeds: {tool_result_embeds}"
+                )
                 if tool_result:
                     tool = tools[tool_function_name]
                     tool_id = tool.get("tool_id", "")
