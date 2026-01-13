@@ -4,20 +4,18 @@ from typing import Optional
 import requests
 import json
 from open_webui.retrieval.web.main import SearchResult, get_filtered_results
-from open_webui.env import SRC_LOG_LEVELS
 
 log = logging.getLogger(__name__)
-log.setLevel(SRC_LOG_LEVELS["RAG"])
 
 
 def _parse_response(response):
-    result = {}
+    results = []
     if "data" in response:
         data = response["data"]
         if "webPages" in data:
             webPages = data["webPages"]
             if "value" in webPages:
-                result["webpage"] = [
+                results = [
                     {
                         "id": item.get("id", ""),
                         "name": item.get("name", ""),
@@ -31,7 +29,7 @@ def _parse_response(response):
                     }
                     for item in webPages["value"]
                 ]
-    return result
+    return results
 
 
 def search_bocha(
@@ -61,5 +59,5 @@ def search_bocha(
         SearchResult(
             link=result["url"], title=result.get("name"), snippet=result.get("summary")
         )
-        for result in results.get("webpage", [])[:count]
+        for result in results[:count]
     ]
