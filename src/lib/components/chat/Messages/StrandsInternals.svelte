@@ -529,83 +529,41 @@
 										</svg>
 									</button>
 									
+									
 									{#if systemInstructionsExpanded}
 										<div class="space-y-2">
-											<!-- Tab Buttons -->
-											<div class="flex gap-1 mb-2 rounded-md p-0.5 bg-gray-100 dark:bg-gray-800 w-fit">
-												<button
-													type="button"
-													class="px-3 py-1 text-xs font-medium transition-colors {systemPromptTab === 'prompt' 
-														? 'bg-blue-600 text-white dark:bg-blue-500' 
-														: 'bg-gray-50 text-gray-700 dark:bg-gray-800 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'}"
-													on:click={() => handleSystemPromptTabSwitch('prompt')}
-												>
-													{$i18n.t('System Prompt')}
-												</button>
-												<button
-													type="button"
-													class="px-3 py-1 text-xs font-medium transition-colors {systemPromptTab === 'preview' 
-														? 'bg-blue-600 text-white dark:bg-blue-500' 
-														: 'bg-gray-50 text-gray-700 dark:bg-gray-800 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'}"
-													on:click={() => handleSystemPromptTabSwitch('preview')}
-												>
-													{$i18n.t('MD Preview')}
-												</button>
-											</div>
-
-											<!-- Tab Content -->
-											<div class="relative {systemPromptTab === 'prompt' ? 'bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800' : 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'} rounded-md p-3 border">
-												{#if systemPromptTab === 'prompt'}
-													<!-- Size badge -->
-													<div class="absolute top-1 right-2 flex gap-1 items-center text-[10px] font-medium bg-white/70 dark:bg-gray-900/70 backdrop-blur px-2 py-0.5 rounded-md border border-gray-200 dark:border-gray-700 shadow-sm select-none">
-														<span>{$i18n.t('Bytes')}: {systemByteCount}</span>
+											<!-- MD Preview Display Only -->
+											<div class="relative bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800 rounded-md p-3 border">
+												<div class="flex gap-0 w-full" style="height: 400px;">
+													<!-- Line numbers gutter for preview -->
+													<div
+														bind:this={previewLineNumbersElement}
+														class="flex flex-col overflow-hidden select-none text-right pr-2 pl-1 py-2 text-xs text-gray-400 dark:text-gray-600 bg-gray-100 dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700"
+														style="min-width: 3rem; line-height: 1.5;"
+													>
+														{#each Array.from({ length: Math.max(internals.system_prompt ? internals.system_prompt.split('\n').length : 1, 4) }, (_, i) => i + 1) as lineNum}
+															<div class="leading-normal">{lineNum}</div>
+														{/each}
 													</div>
-												{/if}
-												{#if systemPromptTab === 'prompt'}
-													<TextareaWithLineNumbers
-														bind:this={promptTextareaElement}
-														className="text-xs text-gray-700 dark:text-gray-300 w-full bg-transparent outline-hidden resize-none overflow-y-auto whitespace-pre-wrap"
-														placeholder={$i18n.t("You're a helpful assistant.")}
-														rows={4}
-														minSize={200}
-														maxSize={400}
-														bind:value={internals.system_prompt}
-														initialScrollTop={sharedScrollPosition}
-														onScrollChange={handlePromptScrollChange}
-														readonly={true}
-													/>
-												{:else if systemPromptTab === 'preview'}
-													<div class="flex gap-0 w-full" style="height: 400px;">
-														<!-- Line numbers gutter for preview -->
-														<div
-															bind:this={previewLineNumbersElement}
-															class="flex flex-col overflow-hidden select-none text-right pr-2 pl-1 py-2 text-xs text-gray-400 dark:text-gray-600 bg-gray-100 dark:bg-gray-900 border-r border-gray-200 dark:border-gray-700"
-															style="min-width: 3rem; line-height: 1.5;"
-														>
-															{#each Array.from({ length: Math.max(internals.system_prompt ? internals.system_prompt.split('\n').length : 1, 4) }, (_, i) => i + 1) as lineNum}
-																<div class="leading-normal">{lineNum}</div>
-															{/each}
-														</div>
-														
-														<!-- Preview content -->
-														<div 
-															bind:this={previewContentElement}
-															class="text-xs w-full bg-transparent outline-hidden resize-none overflow-y-auto scrollbar-thin scrollbar-thumb-gray-400 dark:scrollbar-thumb-gray-600 scrollbar-track-gray-100 dark:scrollbar-track-gray-800 px-3 py-2 h-full"
-															style="width: 100%; box-sizing: border-box;"
-															on:scroll={syncPreviewScroll}
-														>
-															{#if internals.system_prompt.trim() === ''}
-																<div class="text-gray-400 dark:text-gray-500 italic">
-																	{$i18n.t('No system prompt content to preview. Switch to System Prompt tab to add content.')}
-																</div>
-															{:else}
-																<div class="w-full prose prose-sm dark:prose-invert max-w-none text-gray-700 dark:text-gray-300">
-																	{@html DOMPurify.sanitize(marked.parse(internals.system_prompt))}
-																</div>
-															{/if}
-														</div>
+													
+													<!-- Preview content -->
+													<div 
+														bind:this={previewContentElement}
+														class="text-xs w-full bg-transparent outline-hidden resize-none overflow-y-auto scrollbar-thin scrollbar-thumb-gray-400 dark:scrollbar-thumb-gray-600 scrollbar-track-gray-100 dark:scrollbar-track-gray-800 px-3 py-2 h-full"
+														style="width: 100%; box-sizing: border-box;"
+														on:scroll={syncPreviewScroll}
+													>
+														{#if internals.system_prompt.trim() === ''}
+															<div class="text-gray-400 dark:text-gray-500 italic">
+																{$i18n.t('No system prompt content to preview.')}
+															</div>
+														{:else}
+															<div class="w-full prose prose-sm dark:prose-invert max-w-none text-gray-700 dark:text-gray-300">
+																{@html DOMPurify.sanitize(marked.parse(internals.system_prompt))}
+															</div>
+														{/if}
 													</div>
-												{/if}
+												</div>
 											</div>
 										</div>
 									{/if}

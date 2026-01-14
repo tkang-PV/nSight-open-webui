@@ -83,7 +83,7 @@ soundfile==0.13.1
 
 pillow==12.1.0
 opencv-python-headless==4.12.0.88
-rapidocr-onnxruntime==1.2.3
+rapidocr-onnxruntime==1.4.4
 rank-bm25==0.2.2
 
 onnxruntime==1.23.2
@@ -157,3 +157,4 @@ opentelemetry-instrumentation-aiohttp-client==0.60b1
 strands-agents
 strands-agents-tools
 clickhouse_connect
+ffmpeg

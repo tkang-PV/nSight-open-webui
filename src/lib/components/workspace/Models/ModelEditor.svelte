@@ -46,7 +46,7 @@
 
 	let showAdvanced = false;
 	let showPreview = false;
-	let systemPromptTab: 'prompt' | 'preview' = 'prompt';
+	let systemPromptTab: 'prompt' | 'preview' = 'preview';
 	
 	let previewContentElement: HTMLDivElement;
 	let previewLineNumbersElement: HTMLDivElement;
@@ -702,15 +702,6 @@
 								<div class="flex border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden mb-2 w-fit">
 									<button
 										type="button"
-										class="px-3 py-1 text-xs font-medium transition-colors {systemPromptTab === 'prompt' 
-											? 'bg-blue-600 text-white dark:bg-blue-500' 
-											: 'bg-gray-50 text-gray-700 dark:bg-gray-800 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'}"
-										on:click={() => handleTabSwitch('prompt')}
-									>
-										{$i18n.t('System Prompt')}
-									</button>
-									<button
-										type="button"
 										class="px-3 py-1 text-xs font-medium transition-colors {systemPromptTab === 'preview' 
 											? 'bg-blue-600 text-white dark:bg-blue-500' 
 											: 'bg-gray-50 text-gray-700 dark:bg-gray-800 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'}"
@@ -718,6 +709,16 @@
 									>
 										{$i18n.t('MD Preview')}
 									</button>
+									<button
+										type="button"
+										class="px-3 py-1 text-xs font-medium transition-colors {systemPromptTab === 'prompt' 
+											? 'bg-blue-600 text-white dark:bg-blue-500' 
+											: 'bg-gray-50 text-gray-700 dark:bg-gray-800 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'}"
+										on:click={() => handleTabSwitch('prompt')}
+									>
+										{$i18n.t('System Prompt')}
+									</button>
+
 								</div>
 
 								<!-- Tab Content -->

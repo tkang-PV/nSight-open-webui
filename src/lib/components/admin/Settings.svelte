@@ -242,9 +242,9 @@
 		},
 		{
 			id: 'logs',
-			title: 'Pipelines',
+			title: 'Logs',
 			route: '/admin/settings/logs',
-			keywords: ['log', 'track', 'error', 'message', 'info']
+			keywords: ['logs', 'admin', 'users']
 		},
 		{
 			id: 'db',
