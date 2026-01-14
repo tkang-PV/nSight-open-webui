@@ -1406,6 +1406,15 @@ async def process_chat_payload(request, form_data, user, metadata, model):
     # Pipeline Inlet -> Filter Inlet -> Chat Memory -> Chat Web Search -> Chat Image Generation
     # -> Chat Code Interpreter (Form Data Update) -> (Default) Chat Tools Function Calling
     # -> Chat Files
+    
+    # DEBUG: Log function entry with metadata state
+    log.debug(f"[DEBUG] process_chat_payload called")
+    log.debug(f"[DEBUG]   - metadata type: {type(metadata)}, is None: {metadata is None}")
+    if metadata:
+        log.debug(f"[DEBUG]   - metadata keys: {metadata.keys() if isinstance(metadata, dict) else 'NOT A DICT'}")
+        log.debug(f"[DEBUG]   - metadata: {metadata}")
+    log.debug(f"[DEBUG]   - user: {user.id if hasattr(user, 'id') else 'N/A'}")
+    log.debug(f"[DEBUG]   - model: {model.get('id') if isinstance(model, dict) else 'N/A'}")
 
     form_data = apply_params_to_form_data(form_data, model)
     log.debug(f"form_data: {form_data}")
@@ -1413,15 +1422,20 @@ async def process_chat_payload(request, form_data, user, metadata, model):
     system_message = get_system_message(form_data.get("messages", []))
     if system_message:  # Chat Controls/User Settings
         try:
+            log.debug(f"[DEBUG] Applying system prompt to body with metadata: {metadata is not None}")
             form_data = apply_system_prompt_to_body(
                 system_message.get("content"), form_data, metadata, user, replace=True
             )  # Required to handle system prompt variables
-        except:
-            pass
+        except Exception as e:
+            log.error(f"[ERROR] Exception in apply_system_prompt_to_body: {e}")
+            import traceback
+            log.error(f"[ERROR] Traceback:\n{traceback.format_exc()}")
 
     form_data = await convert_url_images_to_base64(form_data)
 
+    log.debug(f"[DEBUG] Getting event_emitter with metadata: {metadata is not None}")
     event_emitter = get_event_emitter(metadata)
+    log.debug(f"[DEBUG] Getting event_caller with metadata: {metadata is not None}")
     event_caller = get_event_call(metadata)
 
     oauth_token = None
@@ -1485,7 +1499,9 @@ async def process_chat_payload(request, form_data, user, metadata, model):
 
     # Model "Knowledge" handling
     user_message = get_last_user_message(form_data["messages"])
-    model_knowledge = model.get("info", {}).get("meta", {}).get("knowledge", False)
+    model_info = model.get("info") or {}
+    model_meta = model_info.get("meta") or {}
+    model_knowledge = model_meta.get("knowledge", False)
 
     if (
         model_knowledge
@@ -1810,12 +1826,18 @@ async def process_chat_payload(request, form_data, user, metadata, model):
 
     # Inject builtin tools for native function calling based on enabled features and model capability
     # Check if builtin_tools capability is enabled for this model (defaults to True if not specified)
-    builtin_tools_enabled = (
-        model.get("info", {})
-        .get("meta", {})
-        .get("capabilities", {})
-        .get("builtin_tools", True)
-    )
+    log.debug(f"[DEBUG] Checking builtin_tools - model type: {type(model)}, is None: {model is None}")
+    if model:
+        log.debug(f"[DEBUG] model keys: {model.keys() if isinstance(model, dict) else 'NOT A DICT'}")
+    
+    model_info = model.get("info") if model else None
+    log.debug(f"[DEBUG] model_info type: {type(model_info)}, is None: {model_info is None}")
+    
+    model_info = model_info or {}
+    model_meta = model_info.get("meta") or {}
+    model_capabilities = model_meta.get("capabilities") or {}
+    builtin_tools_enabled = model_capabilities.get("builtin_tools", True)
+    
     if (
         metadata.get("params", {}).get("function_calling") == "native"
         and builtin_tools_enabled
@@ -1858,12 +1880,10 @@ async def process_chat_payload(request, form_data, user, metadata, model):
                 log.exception(e)
 
     # Check if file context extraction is enabled for this model (default True)
-    file_context_enabled = (
-        model.get("info", {})
-        .get("meta", {})
-        .get("capabilities", {})
-        .get("file_context", True)
-    )
+    model_info_fc = model.get("info") or {}
+    model_meta_fc = model_info_fc.get("meta") or {}
+    model_capabilities_fc = model_meta_fc.get("capabilities") or {}
+    file_context_enabled = model_capabilities_fc.get("file_context", True)
 
     if file_context_enabled:
         try:
@@ -1910,52 +1930,91 @@ async def process_chat_payload(request, form_data, user, metadata, model):
 async def process_chat_response(
     request, response, form_data, user, metadata, model, events, tasks
 ):
+    # DEBUG: Log function entry parameters
+    log.debug(f"[DEBUG] process_chat_response called with parameters:")
+    log.debug(f"[DEBUG]   - metadata type: {type(metadata)}, metadata: {metadata}")
+    log.debug(f"[DEBUG]   - form_data type: {type(form_data)}")
+    log.debug(f"[DEBUG]   - user type: {type(user)}, user.id: {user.id if hasattr(user, 'id') else 'N/A'}")
+    log.debug(f"[DEBUG]   - model type: {type(model)}")
+    log.debug(f"[DEBUG]   - response type: {type(response)}")
+    
     async def background_tasks_handler():
         message = None
         messages = []
+        
+        # DEBUG: Add null check and error handling for metadata
+        try:
+            if metadata is None:
+                log.error("[ERROR] metadata is None in background_tasks_handler!")
+                log.error(f"[DEBUG] form_data available: {form_data is not None}")
+                log.error(f"[DEBUG] user available: {user is not None}")
+                return
+            
+            if not isinstance(metadata, dict):
+                log.error(f"[ERROR] metadata is not a dict, it is: {type(metadata)}")
+                log.error(f"[DEBUG] metadata value: {metadata}")
+                return
+            
+            log.debug(f"[DEBUG] metadata keys: {metadata.keys()}")
+        except Exception as e:
+            log.exception(f"[ERROR] Exception checking metadata: {e}")
+            import traceback
+            log.error(f"[ERROR] Full traceback:\n{traceback.format_exc()}")
+            return
 
-        if "chat_id" in metadata and not metadata["chat_id"].startswith("local:"):
-            messages_map = Chats.get_messages_map_by_chat_id(metadata["chat_id"])
-            message = messages_map.get(metadata["message_id"]) if messages_map else None
+        try:
+            if "chat_id" in metadata and not metadata["chat_id"].startswith("local:"):
+                log.debug(f"[DEBUG] Processing chat_id: {metadata.get('chat_id', 'N/A')}")
+                messages_map = Chats.get_messages_map_by_chat_id(metadata["chat_id"])
+                log.debug(f"[DEBUG] messages_map retrieved, type: {type(messages_map)}, is None: {messages_map is None}")
+                
+                message = messages_map.get(metadata["message_id"]) if messages_map else None
+                log.debug(f"[DEBUG] message retrieved, type: {type(message)}, is None: {message is None}")
 
-            message_list = get_message_list(messages_map, metadata["message_id"])
+                message_list = get_message_list(messages_map, metadata["message_id"])
 
-            # Remove details tags and files from the messages.
-            # as get_message_list creates a new list, it does not affect
-            # the original messages outside of this handler
+                # Remove details tags and files from the messages.
+                # as get_message_list creates a new list, it does not affect
+                # the original messages outside of this handler
 
+                messages = []
+                for message in message_list:
+                    content = message.get("content", "")
+                    if isinstance(content, list):
+                        for item in content:
+                            if item.get("type") == "text":
+                                content = item["text"]
+                                break
+
+                    if isinstance(content, str):
+                        content = re.sub(
+                            r"<details\b[^>]*>.*?<\/details>|!\[.*?\]\(.*?\)",
+                            "",
+                            content,
+                            flags=re.S | re.I,
+                        ).strip()
+
+                    messages.append(
+                        {
+                            **message,
+                            "role": message.get(
+                                "role", "assistant"
+                            ),  # Safe fallback for missing role
+                            "content": content,
+                        }
+                    )
+            else:
+                # Local temp chat, get the model and message from the form_data
+                message = get_last_user_message_item(form_data.get("messages", []))
+                messages = form_data.get("messages", [])
+                if message:
+                    message["model"] = form_data.get("model")
+        except Exception as e:
+            log.error(f"[ERROR] Exception in message retrieval: {e}")
+            import traceback
+            log.error(f"[ERROR] Traceback:\n{traceback.format_exc()}")
+            message = None
             messages = []
-            for message in message_list:
-                content = message.get("content", "")
-                if isinstance(content, list):
-                    for item in content:
-                        if item.get("type") == "text":
-                            content = item["text"]
-                            break
-
-                if isinstance(content, str):
-                    content = re.sub(
-                        r"<details\b[^>]*>.*?<\/details>|!\[.*?\]\(.*?\)",
-                        "",
-                        content,
-                        flags=re.S | re.I,
-                    ).strip()
-
-                messages.append(
-                    {
-                        **message,
-                        "role": message.get(
-                            "role", "assistant"
-                        ),  # Safe fallback for missing role
-                        "content": content,
-                    }
-                )
-        else:
-            # Local temp chat, get the model and message from the form_data
-            message = get_last_user_message_item(form_data.get("messages", []))
-            messages = form_data.get("messages", [])
-            if message:
-                message["model"] = form_data.get("model")
 
         if message and "model" in message:
             if tasks and messages:

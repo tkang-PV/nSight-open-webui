@@ -1715,13 +1715,32 @@ async def chat_completion(
             detail=str(e),
         )
 
+
     async def process_chat(request, form_data, user, metadata, model):
         try:
+            log.debug(f"[DEBUG] process_chat entry - metadata type: {type(metadata)}, is None: {metadata is None}")
+            if metadata:
+                log.debug(f"[DEBUG]   - metadata keys: {metadata.keys()}")
+            
             form_data, metadata, events = await process_chat_payload(
                 request, form_data, user, metadata, model
             )
+            
+            log.debug(f"[DEBUG] After process_chat_payload - metadata type: {type(metadata)}, is None: {metadata is None}")
+            if metadata:
+                log.debug(f"[DEBUG]   - metadata keys: {metadata.keys()}")
+            else:
+                log.error(f"[ERROR] metadata is None after process_chat_payload!")
+                log.error(f"[ERROR] This will cause AttributeError when calling metadata.get() later")
 
             response = await chat_completion_handler(request, form_data, user)
+            
+            # DEBUG: Add null check before using metadata
+            if metadata is None:
+                log.error(f"[ERROR] metadata became None before attempting to access it!")
+                log.error(f"[ERROR] Setting metadata to empty dict to prevent crashes")
+                metadata = {}
+            
             if metadata.get("chat_id") and metadata.get("message_id"):
                 try:
                     if not metadata["chat_id"].startswith("local:"):
@@ -1733,8 +1752,10 @@ async def chat_completion(
                                 "model": model_id,
                             },
                         )
-                except:
-                    pass
+                except Exception as e:
+                    log.error(f"[ERROR] Exception in upsert_message: {e}")
+                    import traceback
+                    log.error(f"[ERROR] Traceback:\n{traceback.format_exc()}")
 
             return await process_chat_response(
                 request, response, form_data, user, metadata, model, events, tasks
@@ -1742,6 +1763,7 @@ async def chat_completion(
         except asyncio.CancelledError:
             log.info("Chat processing was cancelled")
             try:
+                log.debug(f"[DEBUG] In CancelledError handler - metadata: {metadata}")
                 event_emitter = get_event_emitter(metadata)
                 await asyncio.shield(
                     event_emitter(
@@ -1753,8 +1775,13 @@ async def chat_completion(
             finally:
                 raise  # re-raise to ensure proper task cancellation handling
         except Exception as e:
-            log.debug(f"Error processing chat payload: {e}")
-            if metadata.get("chat_id") and metadata.get("message_id"):
+            log.error(f"[ERROR] Exception in process_chat: {e}")
+            log.error(f"[ERROR] Exception type: {type(e)}")
+            import traceback
+            log.error(f"[ERROR] Full traceback:\n{traceback.format_exc()}")
+            log.debug(f"[DEBUG] metadata at error handler: {metadata}")
+            
+            if metadata and isinstance(metadata, dict) and metadata.get("chat_id") and metadata.get("message_id"):
                 # Update the chat message with the error
                 try:
                     if not metadata["chat_id"].startswith("local:"):

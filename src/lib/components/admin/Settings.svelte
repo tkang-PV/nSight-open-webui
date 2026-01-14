@@ -478,19 +478,18 @@
 							/>
 						</svg>
 					{:else if tab.id === 'logs'}
-				<svg
-					xmlns="http://www.w3.org/2000/svg"
-					viewBox="0 0 16 16"
-					fill="currentColor"
-					class="w-4 h-4"
-				>
-					<path
-						fill-rule="evenodd"
-						d="M2 4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V4Zm2 1.5a.5.5 0 0 1 .5-.5h7a.5.5 0 0 1 0 1h-7a.5.5 0 0 1-.5-.5ZM4.5 7a.5.5 0 0 0 0 1h7a.5.5 0 0 0 0-1h-7ZM4 9.5a.5.5 0 0 1 .5-.5h7a.5.5 0 0 1 0 1h-7a.5.5 0 0 1-.5-.5ZM4.5 11a.5.5 0 0 0 0 1h4a.5.5 0 0 0 0-1h-4Z"
-						clip-rule="evenodd"
-					/>
-				</svg>
-			</div>
+						<svg
+							xmlns="http://www.w3.org/2000/svg"
+							viewBox="0 0 16 16"
+							fill="currentColor"
+							class="w-4 h-4"
+						>
+							<path
+								fill-rule="evenodd"
+								d="M2 4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V4Zm2 1.5a.5.5 0 0 1 .5-.5h7a.5.5 0 0 1 0 1h-7a.5.5 0 0 1-.5-.5ZM4.5 7a.5.5 0 0 0 0 1h7a.5.5 0 0 0 0-1h-7ZM4 9.5a.5.5 0 0 1 .5-.5h7a.5.5 0 0 1 0 1h-7a.5.5 0 0 1-.5-.5ZM4.5 11a.5.5 0 0 0 0 1h4a.5.5 0 0 0 0-1h-4Z"
+								clip-rule="evenodd"
+							/>
+						</svg>
 					{:else if tab.id === 'db'}
 						<svg
 							xmlns="http://www.w3.org/2000/svg"
