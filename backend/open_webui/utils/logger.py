@@ -16,6 +16,7 @@ from open_webui.env import (
     ENABLE_OTEL,
     ENABLE_OTEL_LOGS,
 )
+from open_webui.utils.file_logger import setup_file_logging
 
 
 if TYPE_CHECKING:
@@ -121,7 +122,8 @@ def start_logger():
 
     A console (stdout) handler for general log messages (excluding those marked as auditable).
     An optional file handler for audit logs if audit logging is enabled.
-    Additionally, this function reconfigures Python’s standard logging to route through Loguru and adjusts logging levels for Uvicorn.
+    An optional general file handler for all logs if file logging is enabled.
+    Additionally, this function reconfigures Python's standard logging to route through Loguru and adjusts logging levels for Uvicorn.
 
     Parameters:
     enable_audit_logging (bool): Determines whether audit-specific log entries should be recorded to file.
@@ -148,6 +150,9 @@ def start_logger():
             )
         except Exception as e:
             logger.error(f"Failed to initialize audit log file handler: {str(e)}")
+
+    # Setup general file logging directly with Loguru
+    setup_file_logging()
 
     logging.basicConfig(
         handlers=[InterceptHandler()], level=GLOBAL_LOG_LEVEL, force=True

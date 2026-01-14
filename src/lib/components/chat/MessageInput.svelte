@@ -319,6 +319,18 @@
 		}
 	};
 
+	export const appendText = async (text: string) => {
+		const chatInput = document.getElementById('chat-input');
+
+		if (chatInput) {
+			// Get current prompt value and append the new text
+			const currentText = prompt || '';
+			const newText = currentText ? `${currentText} ${text}` : text;
+			
+			await setText(newText);
+		}
+	};
+
 	const getCommand = () => {
 		const chatInput = document.getElementById('chat-input');
 		let word = '';
@@ -337,7 +349,7 @@
 		chatInputElement?.replaceCommandWithText(text);
 	};
 
-	const insertTextAtCursor = async (text: string) => {
+	export const insertTextAtCursor = async (text: string) => {
 		const chatInput = document.getElementById('chat-input');
 		if (!chatInput) return;
 
@@ -346,7 +358,7 @@
 		if (command) {
 			replaceCommandWithText(text);
 		} else {
-			chatInputElement?.insertContent(text);
+			chatInputElement?.insertPlainText(text);
 		}
 
 		await tick();
@@ -371,6 +383,26 @@
 			} else {
 				chatInput.scrollTop = chatInput.scrollHeight;
 			}
+		}
+	};
+
+	export const insertPlainTextAtCursor = async (text: string) => {
+		const chatInput = document.getElementById('chat-input');
+		if (!chatInput) return;
+
+		// Insert plain text directly without command handling or variable processing
+		chatInputElement?.insertPlainText(text);
+
+		await tick();
+
+		const chatInputContainer = document.getElementById('chat-input-container');
+		if (chatInputContainer) {
+			chatInputContainer.scrollTop = chatInputContainer.scrollHeight;
+		}
+
+		if (chatInput) {
+			chatInput.focus();
+			chatInput.dispatchEvent(new Event('input'));
 		}
 	};
 

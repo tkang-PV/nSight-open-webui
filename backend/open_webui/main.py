@@ -93,6 +93,9 @@ from open_webui.routers import (
     users,
     utils,
     scim,
+    strands,
+    logs,
+    clickhouse,
 )
 
 from open_webui.routers.retrieval import (
@@ -543,7 +546,7 @@ from open_webui.constants import ERROR_MESSAGES
 
 
 if SAFE_MODE:
-    print("SAFE MODE ENABLED")
+    log.warning("SAFE MODE ENABLED")
     Functions.deactivate_all_functions()
 
 logging.basicConfig(stream=sys.stdout, level=GLOBAL_LOG_LEVEL)
@@ -565,7 +568,7 @@ class SPAStaticFiles(StaticFiles):
                 raise ex
 
 
-print(
+log.info(
     rf"""
  ██████╗ ██████╗ ███████╗███╗   ██╗    ██╗    ██╗███████╗██████╗ ██╗   ██╗██╗
 ██╔═══██╗██╔══██╗██╔════╝████╗  ██║    ██║    ██║██╔════╝██╔══██╗██║   ██║██║
@@ -1440,6 +1443,13 @@ app.include_router(
     evaluations.router, prefix="/api/v1/evaluations", tags=["evaluations"]
 )
 app.include_router(utils.router, prefix="/api/v1/utils", tags=["utils"])
+app.include_router(logs.router, prefix="/api/v1/logs", tags=["logs"])
+
+# ClickHouse integration
+app.include_router(clickhouse.router, prefix="/api/v1/clickhouse", tags=["clickhouse"])
+
+# Strands AI integration
+app.include_router(strands.router, prefix="/api/v1/strands", tags=["strands"])
 
 # SCIM 2.0 API for identity management
 if ENABLE_SCIM:

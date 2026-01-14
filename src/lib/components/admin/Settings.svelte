@@ -17,6 +17,7 @@
 	import Connections from './Settings/Connections.svelte';
 	import Documents from './Settings/Documents.svelte';
 	import WebSearch from './Settings/WebSearch.svelte';
+	import Logs from './Settings/Logs.svelte';
 
 	import Evaluations from './Settings/Evaluations.svelte';
 	import CodeExecution from './Settings/CodeExecution.svelte';
@@ -48,6 +49,7 @@
 			'audio',
 			'images',
 			'pipelines',
+			'logs',
 			'db'
 		].includes(tabFromPath)
 			? tabFromPath
@@ -238,6 +240,12 @@
 			route: '/admin/settings/pipelines',
 			keywords: ['pipelines', 'workflows', 'filters', 'valves', 'middleware']
 		},
+		{
+			id: 'logs',
+			title: 'Logs',
+			route: '/admin/settings/logs',
+			keywords: ['logs', 'admin', 'users']
+		},		
 		{
 			id: 'db',
 			title: 'Database',
@@ -482,6 +490,19 @@
 								d="m10.933 19.231-7.668-4.13-1.37.739a.75.75 0 0 0 0 1.32l9.75 5.25c.221.12.489.12.71 0l9.75-5.25a.75.75 0 0 0 0-1.32l-1.37-.738-7.668 4.13a2.25 2.25 0 0 1-2.134-.001Z"
 							/>
 						</svg>
+					{:else if tab.id === 'logs'}
+						<svg
+							xmlns="http://www.w3.org/2000/svg"
+							viewBox="0 0 16 16"
+							fill="currentColor"
+							class="w-4 h-4"
+						>
+							<path
+								fill-rule="evenodd"
+								d="M2 4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V4Zm2 1.5a.5.5 0 0 1 .5-.5h7a.5.5 0 0 1 0 1h-7a.5.5 0 0 1-.5-.5ZM4.5 7a.5.5 0 0 0 0 1h7a.5.5 0 0 0 0-1h-7ZM4 9.5a.5.5 0 0 1 .5-.5h7a.5.5 0 0 1 0 1h-7a.5.5 0 0 1-.5-.5ZM4.5 11a.5.5 0 0 0 0 1h4a.5.5 0 0 0 0-1h-4Z"
+								clip-rule="evenodd"
+							/>
+						</svg>
 					{:else if tab.id === 'db'}
 						<svg
 							xmlns="http://www.w3.org/2000/svg"
@@ -581,6 +602,12 @@
 			/>
 		{:else if selectedTab === 'pipelines'}
 			<Pipelines
+				saveHandler={() => {
+					toast.success($i18n.t('Settings saved successfully!'));
+				}}
+			/>
+		{:else if selectedTab === 'logs'}
+			<Logs
 				saveHandler={() => {
 					toast.success($i18n.t('Settings saved successfully!'));
 				}}
