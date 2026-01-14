@@ -157,3 +157,4 @@ opentelemetry-instrumentation-aiohttp-client==0.60b1
 strands-agents
 strands-agents-tools
 clickhouse_connect
+ffmpeg
