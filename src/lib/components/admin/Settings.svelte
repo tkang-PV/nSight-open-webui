@@ -245,7 +245,7 @@
 			title: 'Logs',
 			route: '/admin/settings/logs',
 			keywords: ['logs', 'admin', 'users']
-		},		
+		},
 		{
 			id: 'db',
 			title: 'Database',

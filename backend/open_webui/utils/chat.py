@@ -83,8 +83,16 @@ async def generate_direct_chat_completion(
     models: dict,
 ):
     log.info("generate_direct_chat_completion")
+    
+    # DEBUG: Log form_data state before popping metadata
+    log.debug(f"[DEBUG] generate_direct_chat_completion - form_data has 'metadata' key: {'metadata' in form_data}")
+    if 'metadata' in form_data:
+        log.debug(f"[DEBUG] form_data['metadata'] type: {type(form_data.get('metadata'))}")
 
     metadata = form_data.pop("metadata", {})
+    
+    log.debug(f"[DEBUG] Extracted metadata type: {type(metadata)}, is None: {metadata is None}")
+    log.debug(f"[DEBUG] metadata: {metadata}")
 
     user_id = metadata.get("user_id")
     session_id = metadata.get("session_id")
@@ -183,10 +191,18 @@ async def generate_chat_completion(
     bypass_system_prompt: bool = False,
 ):
     log.debug(f"generate_chat_completion: {form_data}")
+    
+    # DEBUG: Log metadata state at entry
+    log.debug(f"[DEBUG] generate_chat_completion entry - form_data has 'metadata': {'metadata' in form_data}")
+    if 'metadata' in form_data:
+        log.debug(f"[DEBUG]   metadata type: {type(form_data['metadata'])}, value: {form_data['metadata']}")
+    log.debug(f"[DEBUG] request.state has 'metadata': {hasattr(request.state, 'metadata')}")
+    
     if BYPASS_MODEL_ACCESS_CONTROL:
         bypass_filter = True
 
     if hasattr(request.state, "metadata"):
+        log.debug(f"[DEBUG] request.state.metadata found: {request.state.metadata}")
         if "metadata" not in form_data:
             form_data["metadata"] = request.state.metadata
         else:
@@ -194,6 +210,8 @@ async def generate_chat_completion(
                 **form_data["metadata"],
                 **request.state.metadata,
             }
+    
+    log.debug(f"[DEBUG] After metadata merge - form_data['metadata']: {form_data.get('metadata')}")
 
     if getattr(request.state, "direct", False) and hasattr(request.state, "model"):
         models = {
