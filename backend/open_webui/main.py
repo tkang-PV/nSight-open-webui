@@ -93,6 +93,9 @@ from open_webui.routers import (
     users,
     utils,
     scim,
+    strands,
+    logs,
+    clickhouse,
 )
 
 from open_webui.routers.retrieval import (
@@ -543,7 +546,7 @@ from open_webui.constants import ERROR_MESSAGES
 
 
 if SAFE_MODE:
-    print("SAFE MODE ENABLED")
+    log.warning("SAFE MODE ENABLED")
     Functions.deactivate_all_functions()
 
 logging.basicConfig(stream=sys.stdout, level=GLOBAL_LOG_LEVEL)
@@ -565,7 +568,7 @@ class SPAStaticFiles(StaticFiles):
                 raise ex
 
 
-print(
+log.info(
     rf"""
  ██████╗ ██████╗ ███████╗███╗   ██╗    ██╗    ██╗███████╗██████╗ ██╗   ██╗██╗
 ██╔═══██╗██╔══██╗██╔════╝████╗  ██║    ██║    ██║██╔════╝██╔══██╗██║   ██║██║
@@ -1440,6 +1443,13 @@ app.include_router(
     evaluations.router, prefix="/api/v1/evaluations", tags=["evaluations"]
 )
 app.include_router(utils.router, prefix="/api/v1/utils", tags=["utils"])
+app.include_router(logs.router, prefix="/api/v1/logs", tags=["logs"])
+
+# ClickHouse integration
+app.include_router(clickhouse.router, prefix="/api/v1/clickhouse", tags=["clickhouse"])
+
+# Strands AI integration
+app.include_router(strands.router, prefix="/api/v1/strands", tags=["strands"])
 
 # SCIM 2.0 API for identity management
 if ENABLE_SCIM:
@@ -1705,13 +1715,32 @@ async def chat_completion(
             detail=str(e),
         )
 
+
     async def process_chat(request, form_data, user, metadata, model):
         try:
+            log.debug(f"[DEBUG] process_chat entry - metadata type: {type(metadata)}, is None: {metadata is None}")
+            if metadata:
+                log.debug(f"[DEBUG]   - metadata keys: {metadata.keys()}")
+            
             form_data, metadata, events = await process_chat_payload(
                 request, form_data, user, metadata, model
             )
+            
+            log.debug(f"[DEBUG] After process_chat_payload - metadata type: {type(metadata)}, is None: {metadata is None}")
+            if metadata:
+                log.debug(f"[DEBUG]   - metadata keys: {metadata.keys()}")
+            else:
+                log.error(f"[ERROR] metadata is None after process_chat_payload!")
+                log.error(f"[ERROR] This will cause AttributeError when calling metadata.get() later")
 
             response = await chat_completion_handler(request, form_data, user)
+            
+            # DEBUG: Add null check before using metadata
+            if metadata is None:
+                log.error(f"[ERROR] metadata became None before attempting to access it!")
+                log.error(f"[ERROR] Setting metadata to empty dict to prevent crashes")
+                metadata = {}
+            
             if metadata.get("chat_id") and metadata.get("message_id"):
                 try:
                     if not metadata["chat_id"].startswith("local:"):
@@ -1723,8 +1752,10 @@ async def chat_completion(
                                 "model": model_id,
                             },
                         )
-                except:
-                    pass
+                except Exception as e:
+                    log.error(f"[ERROR] Exception in upsert_message: {e}")
+                    import traceback
+                    log.error(f"[ERROR] Traceback:\n{traceback.format_exc()}")
 
             return await process_chat_response(
                 request, response, form_data, user, metadata, model, events, tasks
@@ -1732,6 +1763,7 @@ async def chat_completion(
         except asyncio.CancelledError:
             log.info("Chat processing was cancelled")
             try:
+                log.debug(f"[DEBUG] In CancelledError handler - metadata: {metadata}")
                 event_emitter = get_event_emitter(metadata)
                 await asyncio.shield(
                     event_emitter(
@@ -1743,8 +1775,13 @@ async def chat_completion(
             finally:
                 raise  # re-raise to ensure proper task cancellation handling
         except Exception as e:
-            log.debug(f"Error processing chat payload: {e}")
-            if metadata.get("chat_id") and metadata.get("message_id"):
+            log.error(f"[ERROR] Exception in process_chat: {e}")
+            log.error(f"[ERROR] Exception type: {type(e)}")
+            import traceback
+            log.error(f"[ERROR] Full traceback:\n{traceback.format_exc()}")
+            log.debug(f"[DEBUG] metadata at error handler: {metadata}")
+            
+            if metadata and isinstance(metadata, dict) and metadata.get("chat_id") and metadata.get("message_id"):
                 # Update the chat message with the error
                 try:
                     if not metadata["chat_id"].startswith("local:"):

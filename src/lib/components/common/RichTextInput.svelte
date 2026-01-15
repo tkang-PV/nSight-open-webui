@@ -467,6 +467,15 @@
 		focus();
 	};
 
+	export const insertPlainText = (text: string) => {
+		if (!editor) return;
+
+		// Insert plain text without markdown conversion at the current cursor position
+		editor.commands.insertContent(text);
+
+		focus();
+	};
+
 	export const replaceVariables = (variables) => {
 		if (!editor || !editor.view) return;
 		const { state, view } = editor;

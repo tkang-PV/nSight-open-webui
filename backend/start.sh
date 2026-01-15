@@ -3,6 +3,14 @@
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 cd "$SCRIPT_DIR" || exit
 
+# Optional: load Whisper STT configuration from local env file
+if [ -f ".env.whisper" ]; then
+  # Export variables from .env.whisper to environment
+  set -a
+  . ./.env.whisper
+  set +a
+fi
+
 # Add conditional Playwright browser installation
 if [[ "${WEB_LOADER_ENGINE,,}" == "playwright" ]]; then
     if [[ -z "${PLAYWRIGHT_WS_URL}" ]]; then
