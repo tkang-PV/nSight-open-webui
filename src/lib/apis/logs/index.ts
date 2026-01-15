@@ -135,4 +135,3 @@ export const getLogContent = async (token: string, lines: number = 100, fileInde
 
 	return res;
 };
-#end
