@@ -31,6 +31,20 @@ from open_webui.routers.ollama import (
     generate_chat_completion as generate_ollama_chat_completion,
 )
 
+# Import Strands AI chat completion handler
+try:
+    from open_webui.routers.strands import (
+        chat_completions as strands_chat_completions,
+        ChatRequest,
+        ChatMessage
+    )
+    STRANDS_AVAILABLE = True
+except ImportError:
+    STRANDS_AVAILABLE = False
+    strands_chat_completions = None
+    ChatRequest = None
+    ChatMessage = None
+
 from open_webui.routers.pipelines import (
     process_pipeline_inlet_filter,
     process_pipeline_outlet_filter,
@@ -69,8 +83,16 @@ async def generate_direct_chat_completion(
     models: dict,
 ):
     log.info("generate_direct_chat_completion")
+    
+    # DEBUG: Log form_data state before popping metadata
+    log.debug(f"[DEBUG] generate_direct_chat_completion - form_data has 'metadata' key: {'metadata' in form_data}")
+    if 'metadata' in form_data:
+        log.debug(f"[DEBUG] form_data['metadata'] type: {type(form_data.get('metadata'))}")
 
     metadata = form_data.pop("metadata", {})
+    
+    log.debug(f"[DEBUG] Extracted metadata type: {type(metadata)}, is None: {metadata is None}")
+    log.debug(f"[DEBUG] metadata: {metadata}")
 
     user_id = metadata.get("user_id")
     session_id = metadata.get("session_id")
@@ -169,10 +191,18 @@ async def generate_chat_completion(
     bypass_system_prompt: bool = False,
 ):
     log.debug(f"generate_chat_completion: {form_data}")
+    
+    # DEBUG: Log metadata state at entry
+    log.debug(f"[DEBUG] generate_chat_completion entry - form_data has 'metadata': {'metadata' in form_data}")
+    if 'metadata' in form_data:
+        log.debug(f"[DEBUG]   metadata type: {type(form_data['metadata'])}, value: {form_data['metadata']}")
+    log.debug(f"[DEBUG] request.state has 'metadata': {hasattr(request.state, 'metadata')}")
+    
     if BYPASS_MODEL_ACCESS_CONTROL:
         bypass_filter = True
 
     if hasattr(request.state, "metadata"):
+        log.debug(f"[DEBUG] request.state.metadata found: {request.state.metadata}")
         if "metadata" not in form_data:
             form_data["metadata"] = request.state.metadata
         else:
@@ -180,6 +210,8 @@ async def generate_chat_completion(
                 **form_data["metadata"],
                 **request.state.metadata,
             }
+    
+    log.debug(f"[DEBUG] After metadata merge - form_data['metadata']: {form_data.get('metadata')}")
 
     if getattr(request.state, "direct", False) and hasattr(request.state, "model"):
         models = {
@@ -268,7 +300,61 @@ async def generate_chat_completion(
             return await generate_function_chat_completion(
                 request, form_data, user=user, models=models
             )
-        if model.get("owned_by") == "ollama":
+        elif model.get("owned_by") == "strands-ai":
+            # Using Strands AI direct integration
+            if STRANDS_AVAILABLE and strands_chat_completions:
+                try:
+                    # Convert messages to ChatMessage format
+                    messages = []
+                    for msg in form_data.get("messages", []):
+                        messages.append(ChatMessage(
+                            role=msg.get("role", "user"),
+                            content=msg.get("content", "")
+                        ))
+                    
+                    # Create ChatRequest
+                    chat_request = ChatRequest(
+                        model=form_data.get("model", "strands-ai"),
+                        messages=messages,
+                        max_tokens=form_data.get("max_tokens", 2048),
+                        temperature=form_data.get("temperature", 0.1),
+                        stream=form_data.get("stream", True),
+                        include_internals=True  # Always include internals for frontend display
+                    )
+                    
+                    # Call Strands AI chat completion
+                    response = await strands_chat_completions(
+                        request=request,
+                        chat_request=chat_request,
+                        user=user
+                    )
+                    
+                    return response
+                except Exception as e:
+                    log.error(f"Strands AI chat completion error: {e}")
+                    # Fallback to a simple error response in OpenAI format
+                    return {
+                        "id": f"strands-error-{int(time.time())}",
+                        "object": "chat.completion",
+                        "created": int(time.time()),
+                        "model": form_data.get("model", "strands-ai"),
+                        "choices": [{
+                            "index": 0,
+                            "message": {
+                                "role": "assistant",
+                                "content": f"Error processing Strands AI request: {str(e)}"
+                            },
+                            "finish_reason": "stop"
+                        }],
+                        "usage": {
+                            "prompt_tokens": 0,
+                            "completion_tokens": 0,
+                            "total_tokens": 0
+                        }
+                    }
+            else:
+                raise Exception("Strands AI is not available")
+        elif model.get("owned_by") == "ollama":
             # Using /ollama/api/chat endpoint
             form_data = convert_payload_openai_to_ollama(form_data)
             response = await generate_ollama_chat_completion(

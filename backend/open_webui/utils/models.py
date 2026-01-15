@@ -10,6 +10,14 @@ from open_webui.socket.utils import RedisDict
 from open_webui.routers import openai, ollama
 from open_webui.functions import get_function_models
 
+# Import Strands router for model discovery
+try:
+    from open_webui.routers import strands
+    STRANDS_AVAILABLE = True
+except ImportError:
+    STRANDS_AVAILABLE = False
+    strands = None
+
 
 from open_webui.models.functions import Functions
 from open_webui.models.models import Models
@@ -58,6 +66,37 @@ async def fetch_openai_models(request: Request, user: UserModel = None):
     return openai_response["data"]
 
 
+async def fetch_strands_models(request: Request, user: UserModel = None):
+    """Fetch Strands AI models"""
+    if not STRANDS_AVAILABLE or strands is None:
+        return []
+    
+    try:
+        # Get Strands AI models from the router
+        strands_response = await strands.get_models(request, user=user)
+        
+        # Convert to the expected format
+        models = []
+        for model in strands_response.get("data", []):
+            models.append({
+                "id": model["id"],
+                "name": model.get("description", model["id"]),
+                "object": "model",
+                "created": model.get("created", int(time.time())),
+                "owned_by": "strands-ai",
+                "strands": model,
+                "connection_type": "direct",
+                "tags": ["strands", "ai", "clickhouse", "analytics"],
+            })
+        
+        log.debug(f"Fetched {len(models)} Strands AI models")
+        return models
+        
+    except Exception as e:
+        log.error(f"Failed to fetch Strands AI models: {e}")
+        return []
+
+
 async def get_all_base_models(request: Request, user: UserModel = None):
     openai_task = (
         fetch_openai_models(request, user)
@@ -70,12 +109,19 @@ async def get_all_base_models(request: Request, user: UserModel = None):
         else asyncio.sleep(0, result=[])
     )
     function_task = get_function_models(request)
-
-    openai_models, ollama_models, function_models = await asyncio.gather(
-        openai_task, ollama_task, function_task
+    
+    # Add Strands AI models
+    strands_task = (
+        fetch_strands_models(request, user)
+        if STRANDS_AVAILABLE
+        else asyncio.sleep(0, result=[])
     )
 
-    return function_models + openai_models + ollama_models
+    openai_models, ollama_models, function_models, strands_models = await asyncio.gather(
+        openai_task, ollama_task, function_task, strands_task
+    )
+
+    return function_models + openai_models + ollama_models + strands_models
 
 
 async def get_all_models(request, refresh: bool = False, user: UserModel = None):

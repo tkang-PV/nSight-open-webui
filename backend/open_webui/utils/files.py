@@ -22,6 +22,9 @@ from open_webui.routers.files import upload_file_handler
 import mimetypes
 import base64
 import io
+import logging
+
+log = logging.getLogger(__name__)
 import re
 
 import requests
@@ -105,7 +108,7 @@ def load_b64_audio_data(b64_str):
         )
         return audio_data, content_type
     except Exception as e:
-        print(f"Error decoding base64 audio data: {e}")
+        log.error(f"Error decoding base64 audio data: {e}")
         return None, None
 
 

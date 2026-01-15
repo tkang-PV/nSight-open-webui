@@ -51,7 +51,7 @@ def search_bocha(
     response = requests.post(url, headers=headers, data=payload, timeout=5)
     response.raise_for_status()
     results = _parse_response(response.json())
-
+    log.debug(f"Bocha search results: {results}")
     if filter_list:
         results = get_filtered_results(results, filter_list)
 
