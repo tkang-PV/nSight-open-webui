@@ -27,6 +27,7 @@
 	import PromptSuggestions from './PromptSuggestions.svelte';
 	import AccessControlModal from '../common/AccessControlModal.svelte';
 	import LockClosed from '$lib/components/icons/LockClosed.svelte';
+	import StrandsAISettings from '$lib/components/admin/Settings/Models/StrandsAISettings.svelte';
 
 	const i18n = getContext('i18n');
 
@@ -37,6 +38,7 @@
 	export let edit = false;
 
 	export let preset = true;
+	export let showStrandsAI = false;
 
 	let loading = false;
 	let success = false;
@@ -924,29 +926,38 @@
 
 					<hr class=" border-gray-100/30 dark:border-gray-850/30 my-2" />
 
-					<div class="my-2 flex justify-end">
-						<button
-							class=" text-sm px-3 py-2 transition rounded-lg {loading
-								? ' cursor-not-allowed bg-black hover:bg-gray-900 text-white dark:bg-white dark:hover:bg-gray-100 dark:text-black'
-								: 'bg-black hover:bg-gray-900 text-white dark:bg-white dark:hover:bg-gray-100 dark:text-black'} flex w-full justify-center"
-							type="submit"
-							disabled={loading}
-						>
-							<div class=" self-center font-medium">
-								{#if edit}
-									{$i18n.t('Save & Update')}
-								{:else}
-									{$i18n.t('Save & Create')}
-								{/if}
-							</div>
-
-							{#if loading}
-								<div class="ml-1.5 self-center">
-									<Spinner />
-								</div>
-							{/if}
-						</button>
+				<!-- Strands AI Settings Section -->
+				{#if showStrandsAI && $user?.role === 'admin'}
+					<div class="my-2">
+						<StrandsAISettings />
 					</div>
+
+					<hr class=" border-gray-100/30 dark:border-gray-850/30 my-2" />
+				{/if}
+
+				<div class="my-2 flex justify-end">
+					<button
+						class=" text-sm px-3 py-2 transition rounded-lg {loading
+							? ' cursor-not-allowed bg-black hover:bg-gray-900 text-white dark:bg-white dark:hover:bg-gray-100 dark:text-black'
+							: 'bg-black hover:bg-gray-900 text-white dark:bg-white dark:hover:bg-gray-100 dark:text-black'} flex w-full justify-center"
+						type="submit"
+						disabled={loading}
+					>
+						<div class=" self-center font-medium">
+							{#if edit}
+								{$i18n.t('Save & Update')}
+							{:else}
+								{$i18n.t('Save & Create')}
+							{/if}
+						</div>
+
+						{#if loading}
+							<div class="ml-1.5 self-center">
+								<Spinner />
+							</div>
+						{/if}
+					</button>
+				</div>
 
 					<div class="my-2 text-gray-300 dark:text-gray-700 pb-20">
 						<div class="flex w-full justify-between mb-2">

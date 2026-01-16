@@ -1225,33 +1225,103 @@ async def chat_completions(
             }]
         )
 
-@router.get("/health")
+@router.post("/health")
 async def health_check(request: Request, user=Depends(get_verified_user)):
-    """Health check for Strands AI integration"""
+    """Health check for Strands AI integration with optional config overrides"""
     try:
-        # Test agent initialization
-        agent = initialize_agent()
-        agent_status = "ok" if agent is not None else "error"
+        # Get request body with optional config parameters
+        try:
+            body = await request.json()
+        except Exception as e:
+            log.error(f"Failed to parse request body: {e}")
+            body = {}
         
-        # Test ClickHouse connectivity
-        clickhouse_status = "unknown"
-        if _clickhouse_client:
+        aws_profile = body.get('aws_profile', AWS_PROFILE) if body.get('aws_profile') else AWS_PROFILE
+        aws_region = body.get('aws_region', AWS_DEFAULT_REGION) if body.get('aws_region') else AWS_DEFAULT_REGION
+        model_id = body.get('model_id', MODEL_ID) if body.get('model_id') else MODEL_ID
+        clickhouse_url = body.get('clickhouse_mcp_base_url', CLICKHOUSE_MCP_BASE_URL) if body.get('clickhouse_mcp_base_url') else CLICKHOUSE_MCP_BASE_URL
+        
+        log.info(f"Health check with config - Profile: {aws_profile}, Region: {aws_region}, Model: {model_id}, ClickHouse: {clickhouse_url}")
+        
+        # Temporarily set environment variables for this health check
+        original_profile = os.environ.get('AWS_PROFILE')
+        original_region = os.environ.get('AWS_DEFAULT_REGION')
+        
+        try:
+            os.environ['AWS_PROFILE'] = aws_profile
+            os.environ['AWS_DEFAULT_REGION'] = aws_region
+            
+            # Test agent initialization with provided config
+            agent_status = "error"
+            agent_error = None
             try:
-                databases = _clickhouse_client.list_databases()
-                clickhouse_status = "ok" if "error" not in databases else "error"
+                # Initialize model with provided config
+                if BedrockModel is not None:
+                    model = BedrockModel(model_id=model_id, max_tokens=64000)
+                    agent_status = "ok"
+                    log.info("Agent initialization successful")
+                else:
+                    agent_status = "error"
+                    agent_error = "BedrockModel not available"
+                    log.error("BedrockModel not available")
+            except Exception as e:
+                agent_error = str(e)
+                log.error(f"Agent initialization failed: {e}")
+                agent_status = "error"
+            
+            # Test ClickHouse connectivity
+            clickhouse_status = "unknown"
+            clickhouse_error = None
+            try:
+                client = ClickHouseMCPClient(clickhouse_url)
+                result = client.list_databases()
+                
+                # Check if result has error key
+                if "error" in result:
+                    clickhouse_status = "error"
+                    clickhouse_error = result.get("error")
+                    log.error(f"ClickHouse error: {clickhouse_error}")
+                # Check if we have databases list
+                elif "databases" in result:
+                    databases = result.get("databases", [])
+                    if isinstance(databases, list) and len(databases) > 0:
+                        clickhouse_status = "ok"
+                        log.info(f"ClickHouse connection successful, found {len(databases)} databases")
+                    else:
+                        clickhouse_status = "error"
+                        clickhouse_error = "No databases found in response"
+                        log.warning(f"ClickHouse returned empty databases list")
+                else:
+                    clickhouse_status = "error"
+                    clickhouse_error = "Unexpected response format from ClickHouse"
+                    log.warning(f"ClickHouse returned unexpected response: {result}")
             except Exception as e:
                 clickhouse_status = "error"
+                clickhouse_error = str(e)
                 log.error(f"ClickHouse health check failed: {e}")
-        
-        return {
-            "status": "ok" if agent_status == "ok" and clickhouse_status == "ok" else "degraded",
-            "agent": agent_status,
-            "clickhouse": clickhouse_status,
-            "timestamp": datetime.now().isoformat(),
-            "version": "1.0.0"
-        }
+            
+            return {
+                "status": "ok" if agent_status == "ok" and clickhouse_status == "ok" else ("degraded" if agent_status == "ok" or clickhouse_status == "ok" else "error"),
+                "agent": agent_status,
+                "agent_error": agent_error,
+                "clickhouse": clickhouse_status,
+                "clickhouse_error": clickhouse_error,
+                "timestamp": datetime.now().isoformat(),
+                "version": "1.0.0"
+            }
+        finally:
+            # Restore original environment variables
+            if original_profile:
+                os.environ['AWS_PROFILE'] = original_profile
+            else:
+                os.environ.pop('AWS_PROFILE', None)
+            if original_region:
+                os.environ['AWS_DEFAULT_REGION'] = original_region
+            else:
+                os.environ.pop('AWS_DEFAULT_REGION', None)
+            
     except Exception as e:
-        log.error(f"Health check failed: {str(e)}")
+        log.error(f"Health check failed: {str(e)}", exc_info=True)
         return {
             "status": "error",
             "error": str(e),

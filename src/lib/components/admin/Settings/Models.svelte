@@ -38,7 +38,6 @@
 	import EllipsisHorizontal from '$lib/components/icons/EllipsisHorizontal.svelte';
 	import EyeSlash from '$lib/components/icons/EyeSlash.svelte';
 	import Eye from '$lib/components/icons/Eye.svelte';
-	import StrandsAISettings from './Models/StrandsAISettings.svelte';
 	import { WEBUI_API_BASE_URL, WEBUI_BASE_URL } from '$lib/constants';
 	import { goto } from '$app/navigation';
 
@@ -486,13 +485,6 @@
 			{/if}
 		</div>
 
-		<!-- Strands AI Settings Section -->
-		{#if $user?.role === 'admin'}
-			<div class="mb-6">
-				<StrandsAISettings />
-			</div>
-		{/if}
-
 		{#if $user?.role === 'admin'}
 			<div class=" flex justify-end w-full mb-3">
 				<div class="flex space-x-1">
@@ -594,6 +586,7 @@
 			edit
 			model={models.find((m) => m.id === selectedModelId)}
 			preset={false}
+			showStrandsAI={true}
 			onSubmit={(model) => {
 				console.log(model);
 				upsertModelHandler(model);
