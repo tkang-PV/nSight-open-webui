@@ -152,6 +152,24 @@ export const getBaseModels = async (token: string = '') => {
 export const createNewModel = async (token: string, model: object) => {
 	let error = null;
 
+	console.log('[API createNewModel] ===== createNewModel START =====');
+	console.log('[API createNewModel] model type:', typeof model);
+	console.log('[API createNewModel] model keys:', Object.keys(model));
+	console.log('[API createNewModel] model.meta type:', typeof model.meta);
+	if (model.meta) {
+		console.log('[API createNewModel] model.meta keys:', Object.keys(model.meta));
+		if (model.meta.strands) {
+			console.log('[API createNewModel] ✓ Found model.meta.strands:', model.meta.strands);
+		} else {
+			console.warn('[API createNewModel] ⚠️ model.meta.strands NOT found');
+			console.log('[API createNewModel] Available meta keys:', Object.keys(model.meta));
+		}
+	} else {
+		console.warn('[API createNewModel] model.meta is not present');
+	}
+	
+	console.log('[API createNewModel] Full request body:', JSON.stringify(model, null, 2));
+
 	const res = await fetch(`${WEBUI_API_BASE_URL}/models/create`, {
 		method: 'POST',
 		headers: {
@@ -162,12 +180,19 @@ export const createNewModel = async (token: string, model: object) => {
 		body: JSON.stringify(model)
 	})
 		.then(async (res) => {
+			console.log('[API createNewModel] Response status:', res.status);
 			if (!res.ok) throw await res.json();
 			return res.json();
 		})
+		.then((json) => {
+			console.log('[API createNewModel] Response JSON received');
+			console.log('[API createNewModel] ===== createNewModel END =====');
+			return json;
+		})
 		.catch((err) => {
 			error = err.detail;
-			console.error(err);
+			console.error('[API createNewModel] Error:', err);
+			console.error('[API createNewModel] ===== createNewModel END (ERROR) =====');
 			return null;
 		});
 
@@ -251,6 +276,28 @@ export const toggleModelById = async (token: string, id: string) => {
 export const updateModelById = async (token: string, id: string, model: object) => {
 	let error = null;
 
+	console.log('[API updateModelById] ===== updateModelById START =====');
+	console.log('[API updateModelById] Model ID:', id);
+	console.log('[API updateModelById] model type:', typeof model);
+	console.log('[API updateModelById] model keys:', Object.keys(model));
+	console.log('[API updateModelById] model.meta type:', typeof model.meta);
+	if (model.meta) {
+		console.log('[API updateModelById] model.meta keys:', Object.keys(model.meta));
+		if (model.meta.strands) {
+			console.log('[API updateModelById] ✓ Found model.meta.strands:', model.meta.strands);
+		} else {
+			console.warn('[API updateModelById] ⚠️ model.meta.strands NOT found');
+			console.log('[API updateModelById] Available meta keys:', Object.keys(model.meta));
+		}
+	} else {
+		console.warn('[API updateModelById] model.meta is not present');
+	}
+	
+	const requestBody = { ...model, id };
+	console.log('[API updateModelById] Request body keys:', Object.keys(requestBody));
+	console.log('[API updateModelById] Request body.meta.strands:', requestBody.meta?.strands);
+	console.log('[API updateModelById] Full request body:', JSON.stringify(requestBody, null, 2));
+
 	const res = await fetch(`${WEBUI_API_BASE_URL}/models/model/update`, {
 		method: 'POST',
 		headers: {
@@ -258,19 +305,23 @@ export const updateModelById = async (token: string, id: string, model: object) 
 			'Content-Type': 'application/json',
 			authorization: `Bearer ${token}`
 		},
-		body: JSON.stringify({ ...model, id })
+		body: JSON.stringify(requestBody)
 	})
 		.then(async (res) => {
+			console.log('[API updateModelById] Response status:', res.status);
 			if (!res.ok) throw await res.json();
 			return res.json();
 		})
 		.then((json) => {
+			console.log('[API updateModelById] Response JSON received');
+			console.log('[API updateModelById] ===== updateModelById END =====');
 			return json;
 		})
 		.catch((err) => {
 			error = err;
 
-			console.error(err);
+			console.error('[API updateModelById] Error:', err);
+			console.error('[API updateModelById] ===== updateModelById END (ERROR) =====');
 			return null;
 		});
 

@@ -16,6 +16,14 @@
 		CLICKHOUSE_MCP_BASE_URL: ''
 	};
 
+	// Export config getter for parent component to access
+	export const getConfig = () => config;
+	export const setConfig = (newConfig) => {
+		console.log('[StrandsAISettings] setConfig called with:', newConfig);
+		config = { ...config, ...newConfig };
+		console.log('[StrandsAISettings] Config after setConfig:', config);
+	};
+
 	let internals = {
 		tools: [],
 		system_prompt: '',
@@ -28,7 +36,7 @@
 	let internalsLoading = false;
 	let healthLoading = false;
 
-	const getConfig = async () => {
+	const loadConfigFromAPI = async () => {
 		loading = true;
 		try {
 			const res = await fetch(`/api/v1/strands/config`, {
@@ -180,8 +188,9 @@
 		}
 	};
 
-	onMount(() => {
-		getConfig();
+	onMount(async () => {
+		await loadConfigFromAPI();
+		// Wait for config to be loaded before checking health
 		checkHealth();
 	});
 </script>

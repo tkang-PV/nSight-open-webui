@@ -20,6 +20,7 @@ from open_webui.models.users import UserModel
 from open_webui.models.models import Models
 from open_webui.utils.auth import get_verified_user, get_admin_user
 from open_webui.env import SRC_LOG_LEVELS
+from open_webui.config import save_config, CONFIG_DATA
 
 # Import Strands components directly
 try:
@@ -39,11 +40,55 @@ log.setLevel(SRC_LOG_LEVELS.get("STRANDS", logging.INFO))
 
 router = APIRouter()
 
-# Configuration
-AWS_PROFILE = os.environ.get('AWS_PROFILE', 'nSightS3Profile')
-AWS_DEFAULT_REGION = os.environ.get('AWS_DEFAULT_REGION', 'us-west-2')
-MODEL_ID = os.environ.get('BEDROCK_MODEL_ID', 'us.anthropic.claude-sonnet-4-5-20250929-v1:0')
-CLICKHOUSE_MCP_BASE_URL = os.environ.get('CLICKHOUSE_MCP_BASE_URL', 'http://172.31.2.111:7070/')
+def get_strands_config():
+    """Get Strands configuration from database or environment variables"""
+    log.debug(f"[DEBUG] get_strands_config called")
+    log.debug(f"[DEBUG] CONFIG_DATA type: {type(CONFIG_DATA)}")
+    log.debug(f"[DEBUG] CONFIG_DATA keys: {list(CONFIG_DATA.keys()) if CONFIG_DATA else 'EMPTY'}")
+    log.debug(f"[DEBUG] CONFIG_DATA['strands'] exists: {'strands' in CONFIG_DATA}")
+    if 'strands' in CONFIG_DATA:
+        log.debug(f"[DEBUG] CONFIG_DATA['strands']: {CONFIG_DATA['strands']}")
+    
+    strands_config = CONFIG_DATA.get('strands', {})
+    result = {
+        'AWS_PROFILE': strands_config.get('AWS_PROFILE'),
+        'AWS_DEFAULT_REGION': strands_config.get('AWS_REGION'), 
+        'MODEL_ID': strands_config.get('MODEL_ID'), 
+        'CLICKHOUSE_MCP_BASE_URL': strands_config.get('CLICKHOUSE_MCP_BASE_URL') 
+    }
+    log.debug(f"[DEBUG] get_strands_config returning: {result}")
+    return result
+
+# Initialize from config
+_strands_config = get_strands_config()
+AWS_PROFILE = _strands_config['AWS_PROFILE']
+AWS_DEFAULT_REGION = _strands_config['AWS_DEFAULT_REGION']
+MODEL_ID = _strands_config['MODEL_ID']
+CLICKHOUSE_MCP_BASE_URL = _strands_config['CLICKHOUSE_MCP_BASE_URL']
+
+log.info(f"[STRANDS INIT] Initializing Strands configuration at module load")
+log.info(f"[STRANDS INIT] CONFIG_DATA type: {type(CONFIG_DATA)}")
+log.info(f"[STRANDS INIT] CONFIG_DATA keys: {list(CONFIG_DATA.keys()) if CONFIG_DATA else 'EMPTY'}")
+
+# CRITICAL: Ensure 'strands' key exists in CONFIG_DATA
+if 'strands' not in CONFIG_DATA:
+    log.warning(f"[STRANDS INIT] ⚠️  'strands' key not found in CONFIG_DATA at module load!")
+    log.info(f"[STRANDS INIT] Creating 'strands' key with initial values")
+    CONFIG_DATA['strands'] = {
+        'AWS_PROFILE': AWS_PROFILE,
+        'AWS_DEFAULT_REGION': AWS_DEFAULT_REGION,
+        'MODEL_ID': MODEL_ID,
+        'CLICKHOUSE_MCP_BASE_URL': CLICKHOUSE_MCP_BASE_URL
+    }
+    # Save it to database immediately
+    log.info(f"[STRANDS INIT] Saving initialized strands config to database")
+    save_config(CONFIG_DATA)
+    log.info(f"[STRANDS INIT] ✓ 'strands' key initialized and saved")
+else:
+    log.info(f"[STRANDS INIT] ✓ 'strands' key found in CONFIG_DATA")
+    log.info(f"[STRANDS INIT] CONFIG_DATA['strands']: {CONFIG_DATA['strands']}")
+
+log.info(f"[STRANDS INIT] CONFIG_DATA after init: {CONFIG_DATA.get('strands', {})}")
 
 DEFAULT_SYSTEM_PROMPT = """You are a System Performance Analyst. You can do following tasks:
 - Analyze system performance data stored in a ClickHouse database.
@@ -429,6 +474,20 @@ def initialize_agent(system_prompt: Optional[str] = None):
     """
     global _agent_instance, _clickhouse_client, _agent_tools
     
+    # Reload configuration from CONFIG_DATA to get latest values
+    log.info(f"[STRANDS AGENT] Reloading configuration from CONFIG_DATA")
+    current_config = get_strands_config()
+    current_aws_profile = current_config['AWS_PROFILE']
+    current_aws_region = current_config['AWS_DEFAULT_REGION']
+    current_model_id = current_config['MODEL_ID']
+    current_clickhouse_url = current_config['CLICKHOUSE_MCP_BASE_URL']
+    
+    log.info(f"[STRANDS AGENT] Current config from CONFIG_DATA:")
+    log.info(f"[STRANDS AGENT] - AWS_PROFILE: {current_aws_profile}")
+    log.info(f"[STRANDS AGENT] - AWS_DEFAULT_REGION: {current_aws_region}")
+    log.info(f"[STRANDS AGENT] - MODEL_ID: {current_model_id}")
+    log.info(f"[STRANDS AGENT] - CLICKHOUSE_MCP_BASE_URL: {current_clickhouse_url}")
+    
     # Use provided system prompt or fall back to environment/default
     prompt_to_use = system_prompt if system_prompt is not None else SYSTEM_PROMPT
     
@@ -441,20 +500,36 @@ def initialize_agent(system_prompt: Optional[str] = None):
         return None
     
     try:
-        # Configure AWS
-        os.environ['AWS_PROFILE'] = AWS_PROFILE
-        os.environ['AWS_DEFAULT_REGION'] = AWS_DEFAULT_REGION
+        # Verify required configuration
+        if not all([current_aws_profile, current_aws_region, current_model_id, current_clickhouse_url]):
+            log.error("Missing required Strands configuration")
+            log.error(f"AWS_PROFILE: {current_aws_profile}")
+            log.error(f"AWS_DEFAULT_REGION: {current_aws_region}")
+            log.error(f"MODEL_ID: {current_model_id}")
+            log.error(f"CLICKHOUSE_MCP_BASE_URL: {current_clickhouse_url}")
+            raise ValueError("Strands configuration incomplete: AWS_PROFILE, AWS_DEFAULT_REGION, MODEL_ID, and CLICKHOUSE_MCP_BASE_URL are required")
         
-        log.info(f"Configured AWS Profile: {AWS_PROFILE}")
-        log.info(f"Configured AWS Region: {AWS_DEFAULT_REGION}")
-        log.info(f"Using Bedrock Model: {MODEL_ID}")
+        log.info(f"[STRANDS AGENT] Initializing with configuration:")
+        log.info(f"[STRANDS AGENT] - AWS Profile: {current_aws_profile}")
+        log.info(f"[STRANDS AGENT] - AWS Region: {current_aws_region}")
+        log.info(f"[STRANDS AGENT] - Bedrock Model: {current_model_id}")
         
-        # Initialize BedrockModel
-        model_id = BedrockModel(model_id=MODEL_ID, max_tokens=64000)
-        log.info("BedrockModel initialized successfully")
+        # Set AWS credentials using profile
+        if current_aws_profile:
+            log.info(f"[STRANDS AGENT] Setting AWS profile: {current_aws_profile}")
+            boto_session = boto3.Session(profile_name=current_aws_profile, region_name=current_aws_region)
+            log.info(f"[STRANDS AGENT] Boto3 session created with profile")
+        else:
+            log.info(f"[STRANDS AGENT] Creating default boto3 session")
+            boto_session = boto3.Session(region_name=current_aws_region)
+        
+        # Initialize BedrockModel with the boto session
+        log.info(f"[STRANDS AGENT] Initializing BedrockModel with model_id: {current_model_id}")
+        model_id = BedrockModel(model_id=current_model_id, max_tokens=64000, boto_session=boto_session)
+        log.info("[STRANDS AGENT] BedrockModel initialized successfully")
         
         # Initialize ClickHouse client
-        _clickhouse_client = ClickHouseMCPClient(CLICKHOUSE_MCP_BASE_URL)
+        _clickhouse_client = ClickHouseMCPClient(current_clickhouse_url)
         
         # Create tools for the agent
         @tool
@@ -507,12 +582,12 @@ def initialize_agent(system_prompt: Optional[str] = None):
         _agent_tools = [list_databases, list_tables, run_select_query]
         
         # Create agent with tools
-        log.info("Creating Strands Agent with tools...")
-        log.info(f"[STRANDS AGENT] Initializing with configuration:")
-        log.info(f"[STRANDS AGENT] - Model ID: {MODEL_ID}")
-        log.info(f"[STRANDS AGENT] - AWS Profile: {AWS_PROFILE}")
-        log.info(f"[STRANDS AGENT] - AWS Region: {AWS_DEFAULT_REGION}")
-        log.info(f"[STRANDS AGENT] - ClickHouse URL: {CLICKHOUSE_MCP_BASE_URL}")
+        log.info("[STRANDS AGENT] Creating Strands Agent with tools...")
+        log.info(f"[STRANDS AGENT] Final configuration for agent creation:")
+        log.info(f"[STRANDS AGENT] - Model ID: {current_model_id}")
+        log.info(f"[STRANDS AGENT] - AWS Profile: {current_aws_profile}")
+        log.info(f"[STRANDS AGENT] - AWS Region: {current_aws_region}")
+        log.info(f"[STRANDS AGENT] - ClickHouse URL: {current_clickhouse_url}")
         log.info(f"[STRANDS AGENT] - Tools: {[tool.__name__ for tool in _agent_tools]}")
         
         agent = Agent(
@@ -694,53 +769,143 @@ def build_conversation_context(messages: List[ChatMessage]) -> str:
 
 @router.get("/config")
 async def get_config(request: Request, user=Depends(get_admin_user)):
-    """Get Strands AI configuration"""
-    return {
+    """Get Strands AI configuration - loads fresh from database"""
+    log.info(f"[STRANDS CONFIG] ===== GET /config START =====")
+    log.info(f"[STRANDS CONFIG] Importing CONFIG_DATA reference...")
+    from open_webui.config import CONFIG_DATA as FRESH_CONFIG_DATA
+    
+    log.info(f"[STRANDS CONFIG] FRESH_CONFIG_DATA id: {id(FRESH_CONFIG_DATA)}")
+    log.info(f"[STRANDS CONFIG] FRESH_CONFIG_DATA type: {type(FRESH_CONFIG_DATA)}")
+    log.info(f"[STRANDS CONFIG] FRESH_CONFIG_DATA keys: {list(FRESH_CONFIG_DATA.keys()) if FRESH_CONFIG_DATA else 'EMPTY'}")
+    log.info(f"[STRANDS CONFIG] 'strands' in FRESH_CONFIG_DATA: {'strands' in FRESH_CONFIG_DATA}")
+    
+    if 'strands' in FRESH_CONFIG_DATA:
+        log.info(f"[STRANDS CONFIG] FRESH_CONFIG_DATA['strands']: {FRESH_CONFIG_DATA['strands']}")
+    else:
+        log.warning(f"[STRANDS CONFIG] WARNING: 'strands' key NOT in FRESH_CONFIG_DATA!")
+    
+    log.info(f"[STRANDS CONFIG] Calling get_strands_config()...")
+    current_config = get_strands_config()
+    log.info(f"[STRANDS CONFIG] get_strands_config returned: {current_config}")
+    
+    result = {
         "ENABLE_STRANDS_AI": True,
-        "AWS_PROFILE": AWS_PROFILE,
-        "AWS_REGION": AWS_DEFAULT_REGION,
-        "MODEL_ID": MODEL_ID,
-        "CLICKHOUSE_MCP_BASE_URL": CLICKHOUSE_MCP_BASE_URL
+        "AWS_PROFILE": current_config.get('AWS_PROFILE'),
+        "AWS_REGION": current_config.get('AWS_DEFAULT_REGION'),
+        "MODEL_ID": current_config.get('MODEL_ID'),
+        "CLICKHOUSE_MCP_BASE_URL": current_config.get('CLICKHOUSE_MCP_BASE_URL')
     }
+    log.info(f"[STRANDS CONFIG] Final result to return: {result}")
+    log.info(f"[STRANDS CONFIG] ===== GET /config END =====")
+    return result
 
 @router.post("/config/update")
 async def update_config(
+    config_data: Dict[str, Any],
     request: Request, 
-    form_data: Dict[str, Any], 
     user=Depends(get_admin_user)
 ):
-    """Update Strands AI configuration"""
+    """Update Strands AI configuration and persist to database"""
     global AWS_PROFILE, AWS_DEFAULT_REGION, MODEL_ID, CLICKHOUSE_MCP_BASE_URL
     global _agent_instance, _clickhouse_client
     
-    # Update configuration
-    if "AWS_PROFILE" in form_data:
-        AWS_PROFILE = form_data["AWS_PROFILE"]
-        os.environ["AWS_PROFILE"] = AWS_PROFILE
+    log.info(f"[STRANDS CONFIG] ===== POST /config/update START =====")
+    log.info(f"[STRANDS CONFIG] Received config_data: {config_data}")
+    log.info(f"[STRANDS CONFIG] config_data type: {type(config_data)}")
+    log.info(f"[STRANDS CONFIG] config_data keys: {list(config_data.keys())}")
     
-    if "AWS_REGION" in form_data:
-        AWS_DEFAULT_REGION = form_data["AWS_REGION"]
-        os.environ["AWS_DEFAULT_REGION"] = AWS_DEFAULT_REGION
+    # Import fresh reference to CONFIG_DATA
+    from open_webui.config import CONFIG_DATA as FRESH_CONFIG_DATA
+    log.info(f"[STRANDS CONFIG] FRESH_CONFIG_DATA id before update: {id(FRESH_CONFIG_DATA)}")
+    log.info(f"[STRANDS CONFIG] FRESH_CONFIG_DATA['strands'] before: {FRESH_CONFIG_DATA.get('strands', {})}")
     
-    if "MODEL_ID" in form_data:
-        MODEL_ID = form_data["MODEL_ID"]
-        os.environ["BEDROCK_MODEL_ID"] = MODEL_ID
+    # Ensure CONFIG_DATA has strands key
+    if 'strands' not in FRESH_CONFIG_DATA:
+        log.warning(f"[STRANDS CONFIG] WARNING: 'strands' key missing in FRESH_CONFIG_DATA, creating it...")
+        FRESH_CONFIG_DATA['strands'] = {}
     
-    if "CLICKHOUSE_MCP_BASE_URL" in form_data:
-        CLICKHOUSE_MCP_BASE_URL = form_data["CLICKHOUSE_MCP_BASE_URL"]
-        os.environ["CLICKHOUSE_MCP_BASE_URL"] = CLICKHOUSE_MCP_BASE_URL
+    # Create a copy for updating
+    current_config = dict(FRESH_CONFIG_DATA)
+    log.info(f"[STRANDS CONFIG] current_config after dict(): {current_config.get('strands', {})}")
+    
+    if 'strands' not in current_config:
+        log.warning(f"[STRANDS CONFIG] WARNING: 'strands' key missing in current_config after dict(), creating it...")
+        current_config['strands'] = {}
+    
+    log.info(f"[STRANDS CONFIG] Current config before updates: {current_config.get('strands', {})}")
+    
+    # Track what was updated
+    updated_fields = []
+    
+    # Update configuration values - save any provided field regardless of emptiness
+    if "AWS_PROFILE" in config_data:
+        log.debug(f"[DEBUG] AWS_PROFILE in config_data: {config_data['AWS_PROFILE']}")
+        globals()["AWS_PROFILE"] = config_data["AWS_PROFILE"]
+        current_config['strands']['AWS_PROFILE'] = config_data["AWS_PROFILE"]
+        updated_fields.append(f"AWS_PROFILE={config_data['AWS_PROFILE']}")
+        log.info(f"[STRANDS CONFIG] Set AWS_PROFILE: {config_data['AWS_PROFILE']}")
+    
+    if "AWS_REGION" in config_data:
+        log.debug(f"[DEBUG] AWS_REGION in config_data: {config_data['AWS_REGION']}")
+        globals()["AWS_DEFAULT_REGION"] = config_data["AWS_REGION"]
+        current_config['strands']['AWS_REGION'] = config_data["AWS_REGION"]
+        updated_fields.append(f"AWS_REGION={config_data['AWS_REGION']}")
+        log.info(f"[STRANDS CONFIG] Set AWS_REGION: {config_data['AWS_REGION']}")
+    
+    if "MODEL_ID" in config_data:
+        log.debug(f"[DEBUG] MODEL_ID in config_data: {config_data['MODEL_ID']}")
+        globals()["MODEL_ID"] = config_data["MODEL_ID"]
+        current_config['strands']['MODEL_ID'] = config_data["MODEL_ID"]
+        updated_fields.append(f"MODEL_ID={config_data['MODEL_ID']}")
+        log.info(f"[STRANDS CONFIG] Set MODEL_ID: {config_data['MODEL_ID']}")
+    
+    if "CLICKHOUSE_MCP_BASE_URL" in config_data:
+        log.debug(f"[DEBUG] CLICKHOUSE_MCP_BASE_URL in config_data: {config_data['CLICKHOUSE_MCP_BASE_URL']}")
+        globals()["CLICKHOUSE_MCP_BASE_URL"] = config_data["CLICKHOUSE_MCP_BASE_URL"]
+        current_config['strands']['CLICKHOUSE_MCP_BASE_URL'] = config_data["CLICKHOUSE_MCP_BASE_URL"]
+        updated_fields.append(f"CLICKHOUSE_MCP_BASE_URL={config_data['CLICKHOUSE_MCP_BASE_URL']}")
+        log.info(f"[STRANDS CONFIG] Set CLICKHOUSE_MCP_BASE_URL: {config_data['CLICKHOUSE_MCP_BASE_URL']}")
+    
+    log.info(f"[STRANDS CONFIG] Updated fields: {updated_fields}")
+    log.info(f"[STRANDS CONFIG] current_config['strands'] before save: {current_config.get('strands', {})}")
+    
+    # Save to database
+    log.info(f"[STRANDS CONFIG] Calling save_config with: {current_config}")
+    success = save_config(current_config)
+    log.info(f"[STRANDS CONFIG] save_config returned: {success}")
+    
+    if not success:
+        log.error("[STRANDS CONFIG] ✗ Failed to save configuration to database")
+        raise HTTPException(status_code=500, detail="Failed to save configuration to database")
+    
+    log.info(f"[STRANDS CONFIG] ✓ Configuration saved successfully to database")
+    
+    # CRITICAL: Reimport CONFIG_DATA to get the updated version from save_config
+    log.info(f"[STRANDS CONFIG] Re-importing CONFIG_DATA to get fresh copy after save_config()...")
+    from open_webui.config import CONFIG_DATA as RELOADED_CONFIG_DATA
+    log.info(f"[STRANDS CONFIG] RELOADED_CONFIG_DATA['strands'] after save: {RELOADED_CONFIG_DATA.get('strands', {})}")
     
     # Reset agent to pick up new configuration
     _agent_instance = None
     _clickhouse_client = None
+    log.info(f"[STRANDS CONFIG] Agent and ClickHouse client reset")
     
-    return {
+    # Verify config was saved by reading it back from CONFIG_DATA
+    log.info(f"[STRANDS CONFIG] Verifying by calling get_strands_config()...")
+    saved_config = get_strands_config()
+    log.info(f"[STRANDS CONFIG] Verification result: {saved_config}")
+    
+    # Return the updated values
+    response_data = {
         "ENABLE_STRANDS_AI": True,
-        "AWS_PROFILE": AWS_PROFILE,
-        "AWS_REGION": AWS_DEFAULT_REGION,
-        "MODEL_ID": MODEL_ID,
-        "CLICKHOUSE_MCP_BASE_URL": CLICKHOUSE_MCP_BASE_URL
+        "AWS_PROFILE": globals().get("AWS_PROFILE"),
+        "AWS_REGION": globals().get("AWS_DEFAULT_REGION"),
+        "MODEL_ID": globals().get("MODEL_ID"),
+        "CLICKHOUSE_MCP_BASE_URL": globals().get("CLICKHOUSE_MCP_BASE_URL")
     }
+    log.info(f"[STRANDS CONFIG] Returning response: {response_data}")
+    log.info(f"[STRANDS CONFIG] ===== POST /config/update END =====")
+    return response_data
 
 @router.get("/models")
 async def get_models(request: Request, user=Depends(get_verified_user)):

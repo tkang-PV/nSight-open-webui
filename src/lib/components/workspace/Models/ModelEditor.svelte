@@ -58,6 +58,10 @@
 	let showAccessControlModal = false;
 
 	let loaded = false;
+	let strandsAIComponent: any = null;
+	
+	// Check if this is a Strands model
+	$: isStrandsModel = id?.toLowerCase().includes('strands') || name?.toLowerCase().includes('strands') || info?.base_model_id?.toLowerCase().includes('strands');
 
 	// ///////////
 	// model
@@ -223,6 +227,36 @@
 			}
 		}
 
+		// Collect Strands AI configuration if this is a Strands model
+		console.log('[ModelEditor] isStrandsModel:', isStrandsModel);
+		console.log('[ModelEditor] strandsAIComponent:', strandsAIComponent);
+		
+		if (isStrandsModel && strandsAIComponent) {
+			console.log('[ModelEditor] ✓ Is Strands model, collecting config');
+			const strandsConfig = strandsAIComponent.getConfig();
+			console.log('[ModelEditor] Strands config from component:', strandsConfig);
+			console.log('[ModelEditor] Strands config type:', typeof strandsConfig);
+			
+			if (strandsConfig) {
+				if (!info.meta.strands) {
+					info.meta.strands = {};
+					console.log('[ModelEditor] Created empty strands object in meta');
+				}
+				info.meta.strands = {
+					AWS_PROFILE: strandsConfig.AWS_PROFILE,
+					AWS_REGION: strandsConfig.AWS_REGION,
+					MODEL_ID: strandsConfig.MODEL_ID,
+					CLICKHOUSE_MCP_BASE_URL: strandsConfig.CLICKHOUSE_MCP_BASE_URL,
+					ENABLE_STRANDS_AI: strandsConfig.ENABLE_STRANDS_AI
+				};
+				console.log('[ModelEditor] ✓ Collected Strands config:', info.meta.strands);
+			} else {
+				console.warn('[ModelEditor] ⚠️ strandsConfig is null or undefined');
+			}
+		} else {
+			console.log('[ModelEditor] Not a Strands model or component not available');
+		}
+
 		info.params.system = system.trim() === '' ? null : system;
 		info.params.stop = params.stop ? params.stop.split(',').filter((s) => s.trim()) : null;
 		Object.keys(info.params).forEach((key) => {
@@ -230,6 +264,13 @@
 				delete info.params[key];
 			}
 		});
+
+		console.log('[ModelEditor] ===== Final info object before submit =====');
+		console.log('[ModelEditor] info.id:', info.id);
+		console.log('[ModelEditor] info.name:', info.name);
+		console.log('[ModelEditor] info.meta:', info.meta);
+		console.log('[ModelEditor] info.meta.strands:', info.meta.strands);
+		console.log('[ModelEditor] Full info:', JSON.stringify(info, null, 2));
 
 		await onSubmit(info);
 
@@ -333,6 +374,12 @@
 		}
 
 		loaded = true;
+
+		// After component is loaded, populate Strands config if available
+		await tick();
+		if (isStrandsModel && model?.meta?.strands && strandsAIComponent) {
+			strandsAIComponent.setConfig(model.meta.strands);
+		}
 	});
 
 	const syncPreviewScroll = () => {
@@ -927,9 +974,9 @@
 					<hr class=" border-gray-100/30 dark:border-gray-850/30 my-2" />
 
 				<!-- Strands AI Settings Section -->
-				{#if showStrandsAI && $user?.role === 'admin'}
+				{#if showStrandsAI && isStrandsModel && $user?.role === 'admin'}
 					<div class="my-2">
-						<StrandsAISettings />
+						<StrandsAISettings bind:this={strandsAIComponent} />
 					</div>
 
 					<hr class=" border-gray-100/30 dark:border-gray-850/30 my-2" />

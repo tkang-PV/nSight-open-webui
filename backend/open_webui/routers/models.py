@@ -4,6 +4,7 @@ import base64
 import json
 import asyncio
 import logging
+import traceback
 
 from open_webui.models.groups import Groups
 from open_webui.models.models import (
@@ -31,11 +32,126 @@ from fastapi.responses import FileResponse, StreamingResponse
 
 from open_webui.utils.auth import get_admin_user, get_verified_user
 from open_webui.utils.access_control import has_access, has_permission
-from open_webui.config import BYPASS_ADMIN_ACCESS_CONTROL, STATIC_DIR
+from open_webui.config import BYPASS_ADMIN_ACCESS_CONTROL, STATIC_DIR, save_config, CONFIG_DATA
 from open_webui.internal.db import get_session
 from sqlalchemy.orm import Session
 
 log = logging.getLogger(__name__)
+
+
+def _update_strands_config_from_model(form_data: ModelForm):
+    """Extract and save Strands configuration from model metadata to CONFIG_DATA"""
+    try:
+        log.info(f"[MODELS HANDLER] ===== _update_strands_config_from_model START =====")
+        log.info(f"[MODELS HANDLER] Model ID: {form_data.id}")
+        log.info(f"[MODELS HANDLER] Model name: {form_data.name}")
+        log.info(f"[MODELS HANDLER] form_data type: {type(form_data)}")
+        log.info(f"[MODELS HANDLER] form_data.meta type: {type(form_data.meta)}")
+        log.info(f"[MODELS HANDLER] form_data.meta is dict: {isinstance(form_data.meta, dict)}")
+        
+        # Convert Pydantic model to dict if needed
+        meta_dict = None
+        if form_data.meta:
+            if isinstance(form_data.meta, dict):
+                meta_dict = form_data.meta
+                log.info(f"[MODELS HANDLER] form_data.meta is already a dict")
+            elif hasattr(form_data.meta, 'model_dump'):
+                meta_dict = form_data.meta.model_dump()
+                log.info(f"[MODELS HANDLER] Converted Pydantic model to dict using model_dump()")
+            elif hasattr(form_data.meta, 'dict'):
+                meta_dict = form_data.meta.dict()
+                log.info(f"[MODELS HANDLER] Converted Pydantic model to dict using dict()")
+            else:
+                log.warning(f"[MODELS HANDLER] form_data.meta has unknown type, attempting str conversion")
+                log.debug(f"[MODELS HANDLER] form_data.meta dir(): {dir(form_data.meta)}")
+            
+            if meta_dict:
+                log.info(f"[MODELS HANDLER] meta_dict keys: {list(meta_dict.keys())}")
+                log.debug(f"[MODELS HANDLER] meta_dict full content: {meta_dict}")
+            else:
+                log.warning(f"[MODELS HANDLER] Failed to convert meta to dict")
+        else:
+            log.warning(f"[MODELS HANDLER] form_data.meta is None or empty")
+        
+        # Check if this is a Strands model with strands config in metadata
+        if meta_dict:
+            log.info(f"[MODELS HANDLER] meta_dict is valid")
+            
+            if 'strands' in meta_dict:
+                strands_config = meta_dict['strands']
+                log.info(f"[MODELS HANDLER] ✓ Found 'strands' key in metadata")
+                log.info(f"[MODELS HANDLER] strands_config type: {type(strands_config)}")
+                log.info(f"[MODELS HANDLER] strands_config: {strands_config}")
+                
+                # Ensure CONFIG_DATA has strands key
+                if 'strands' not in CONFIG_DATA:
+                    log.warning(f"[MODELS HANDLER] 'strands' key not in CONFIG_DATA, creating it")
+                    CONFIG_DATA['strands'] = {}
+                else:
+                    log.info(f"[MODELS HANDLER] 'strands' key already exists in CONFIG_DATA")
+                
+                log.info(f"[MODELS HANDLER] CONFIG_DATA['strands'] before update: {CONFIG_DATA['strands']}")
+                
+                # Update CONFIG_DATA with the provided strands config
+                updated_fields = []
+                
+                if 'AWS_PROFILE' in strands_config:
+                    old_value = CONFIG_DATA['strands'].get('AWS_PROFILE')
+                    new_value = strands_config['AWS_PROFILE']
+                    CONFIG_DATA['strands']['AWS_PROFILE'] = new_value
+                    updated_fields.append('AWS_PROFILE')
+                    log.info(f"[MODELS HANDLER] AWS_PROFILE: {old_value} -> {new_value}")
+                
+                if 'AWS_REGION' in strands_config:
+                    old_value = CONFIG_DATA['strands'].get('AWS_REGION')
+                    new_value = strands_config['AWS_REGION']
+                    CONFIG_DATA['strands']['AWS_REGION'] = new_value
+                    updated_fields.append('AWS_REGION')
+                    log.info(f"[MODELS HANDLER] AWS_REGION: {old_value} -> {new_value}")
+                
+                if 'MODEL_ID' in strands_config:
+                    old_value = CONFIG_DATA['strands'].get('MODEL_ID')
+                    new_value = strands_config['MODEL_ID']
+                    CONFIG_DATA['strands']['MODEL_ID'] = new_value
+                    updated_fields.append('MODEL_ID')
+                    log.info(f"[MODELS HANDLER] MODEL_ID: {old_value} -> {new_value}")
+                
+                if 'CLICKHOUSE_MCP_BASE_URL' in strands_config:
+                    old_value = CONFIG_DATA['strands'].get('CLICKHOUSE_MCP_BASE_URL')
+                    new_value = strands_config['CLICKHOUSE_MCP_BASE_URL']
+                    CONFIG_DATA['strands']['CLICKHOUSE_MCP_BASE_URL'] = new_value
+                    updated_fields.append('CLICKHOUSE_MCP_BASE_URL')
+                    log.info(f"[MODELS HANDLER] CLICKHOUSE_MCP_BASE_URL: {old_value} -> {new_value}")
+                
+                log.info(f"[MODELS HANDLER] CONFIG_DATA['strands'] after updates: {CONFIG_DATA['strands']}")
+                log.info(f"[MODELS HANDLER] Updated fields count: {len(updated_fields)}")
+                log.info(f"[MODELS HANDLER] Updated fields: {updated_fields}")
+                
+                if updated_fields:
+                    log.info(f"[MODELS HANDLER] Calling save_config() with updated CONFIG_DATA")
+                    log.debug(f"[MODELS HANDLER] Full CONFIG_DATA being saved: {CONFIG_DATA}")
+                    
+                    success = save_config(CONFIG_DATA)
+                    log.info(f"[MODELS HANDLER] save_config() returned: {success} (type: {type(success)})")
+                    
+                    if success:
+                        log.info(f"[MODELS HANDLER] ✓ Strands configuration persisted successfully to database")
+                        log.info(f"[MODELS HANDLER] Verifying CONFIG_DATA after save_config(): {CONFIG_DATA.get('strands', {})}")
+                    else:
+                        log.warning(f"[MODELS HANDLER] ⚠️ save_config returned False - config may not have been saved")
+                else:
+                    log.warning(f"[MODELS HANDLER] ⚠️ No fields were updated from strands config")
+            else:
+                log.warning(f"[MODELS HANDLER] 'strands' key NOT found in meta_dict")
+                log.info(f"[MODELS HANDLER] Available keys in meta_dict: {list(meta_dict.keys())}")
+        else:
+            log.warning(f"[MODELS HANDLER] meta_dict is not valid or is None")
+        
+        log.info(f"[MODELS HANDLER] ===== _update_strands_config_from_model END =====")
+    except Exception as e:
+        log.error(f"[MODELS HANDLER] ✗ Error updating Strands config: {e}")
+        log.error(f"[MODELS HANDLER] Exception type: {type(e).__name__}")
+        log.error(f"[MODELS HANDLER] Traceback: {traceback.format_exc()}")
 
 router = APIRouter()
 
@@ -157,6 +273,22 @@ async def create_new_model(
     user=Depends(get_verified_user),
     db: Session = Depends(get_session),
 ):
+    log.info(f"[MODELS CREATE] ===== POST /create START =====")
+    log.info(f"[MODELS CREATE] Received model creation request")
+    log.info(f"[MODELS CREATE] Model ID: {form_data.id}")
+    log.info(f"[MODELS CREATE] Model name: {form_data.name}")
+    log.info(f"[MODELS CREATE] form_data type: {type(form_data)}")
+    log.debug(f"[MODELS CREATE] Full form_data: {form_data}")
+    log.info(f"[MODELS CREATE] form_data.meta type: {type(form_data.meta)}")
+    if form_data.meta:
+        log.info(f"[MODELS CREATE] form_data.meta keys: {list(form_data.meta.keys()) if isinstance(form_data.meta, dict) else 'NOT_A_DICT'}")
+        if isinstance(form_data.meta, dict) and 'strands' in form_data.meta:
+            log.info(f"[MODELS CREATE] ✓ Strands config found in request: {form_data.meta['strands']}")
+        else:
+            log.warning(f"[MODELS CREATE] ⚠️ Strands config NOT found in request meta")
+    else:
+        log.warning(f"[MODELS CREATE] form_data.meta is None or empty")
+    
     if user.role != "admin" and not has_permission(
         user.id, "workspace.models", request.app.state.config.USER_PERMISSIONS, db=db
     ):
@@ -179,10 +311,19 @@ async def create_new_model(
         )
 
     else:
+        # Extract and save Strands configuration if present
+        log.info(f"[MODELS CREATE] Calling _update_strands_config_from_model()")
+        _update_strands_config_from_model(form_data)
+        log.info(f"[MODELS CREATE] Returned from _update_strands_config_from_model()")
+        
+        log.info(f"[MODELS CREATE] Calling Models.insert_new_model()")
         model = Models.insert_new_model(form_data, user.id, db=db)
         if model:
+            log.info(f"[MODELS CREATE] ✓ Model created successfully: {form_data.id}")
+            log.info(f"[MODELS CREATE] ===== POST /create END =====")
             return model
         else:
+            log.error(f"[MODELS CREATE] ✗ Failed to create model")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail=ERROR_MESSAGES.DEFAULT(),
@@ -429,8 +570,25 @@ async def update_model_by_id(
     user=Depends(get_verified_user),
     db: Session = Depends(get_session),
 ):
+    log.info(f"[MODELS UPDATE] ===== POST /model/update START =====")
+    log.info(f"[MODELS UPDATE] Received model update request")
+    log.info(f"[MODELS UPDATE] Model ID: {form_data.id}")
+    log.info(f"[MODELS UPDATE] Model name: {form_data.name}")
+    log.info(f"[MODELS UPDATE] form_data type: {type(form_data)}")
+    log.debug(f"[MODELS UPDATE] Full form_data: {form_data}")
+    log.info(f"[MODELS UPDATE] form_data.meta type: {type(form_data.meta)}")
+    if form_data.meta:
+        log.info(f"[MODELS UPDATE] form_data.meta keys: {list(form_data.meta.keys()) if isinstance(form_data.meta, dict) else 'NOT_A_DICT'}")
+        if isinstance(form_data.meta, dict) and 'strands' in form_data.meta:
+            log.info(f"[MODELS UPDATE] ✓ Strands config found in request: {form_data.meta['strands']}")
+        else:
+            log.warning(f"[MODELS UPDATE] ⚠️ Strands config NOT found in request meta")
+    else:
+        log.warning(f"[MODELS UPDATE] form_data.meta is None or empty")
+    
     model = Models.get_model_by_id(form_data.id, db=db)
     if not model:
+        log.error(f"[MODELS UPDATE] ✗ Model not found: {form_data.id}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=ERROR_MESSAGES.NOT_FOUND,
@@ -441,14 +599,23 @@ async def update_model_by_id(
         and not has_access(user.id, "write", model.access_control, db=db)
         and user.role != "admin"
     ):
+        log.error(f"[MODELS UPDATE] ✗ Access denied for user {user.id}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=ERROR_MESSAGES.ACCESS_PROHIBITED,
         )
 
+    # Extract and save Strands configuration if present
+    log.info(f"[MODELS UPDATE] Calling _update_strands_config_from_model()")
+    _update_strands_config_from_model(form_data)
+    log.info(f"[MODELS UPDATE] Returned from _update_strands_config_from_model()")
+
+    log.info(f"[MODELS UPDATE] Calling Models.update_model_by_id()")
     model = Models.update_model_by_id(
         form_data.id, ModelForm(**form_data.model_dump()), db=db
     )
+    log.info(f"[MODELS UPDATE] ✓ Model updated successfully: {form_data.id}")
+    log.info(f"[MODELS UPDATE] ===== POST /model/update END =====")
     return model
 
 
